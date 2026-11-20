@@ -98,8 +98,8 @@ const PLACES = [
   ['дача', 'на даче'], ['даче', 'на даче'], ['универ', 'в универе'], ['школ', 'в школе'],
   ['библиотек', 'в библиотеке'], ['набережн', 'на набережной'], ['поезд', 'в поезде'],
   ['аэропорт', 'в аэропорту'], ['трениров', 'на тренировке'], ['площадк', 'на площадке'],
-  ['каток', 'на катке'], ['хакатон', 'на хакатоне'], ['дома', 'дома'], ['город', 'в городе'],
-  ['улиц', 'на улице'], ['баскетбол', 'на баскетболе'], ['футбол', 'на футболе'], ['зал', 'в зале'], ['степ', 'в степи'], ['балкон', 'на балконе'],
+  ['каток', 'на катке'], ['катк', 'на катке'], ['хакатон', 'на хакатоне'], ['дома', 'дома'], ['город', 'в городе'],
+  ['улиц', 'на улице'], ['подруг', 'у подруги'], ['у друга', 'у друга'], ['возле друга', 'у друга'], ['к другу', 'у друга'], ['гостях', 'в гостях'], ['машин', 'в машине'], ['автобус', 'в автобусе'], ['маршрутк', 'в маршрутке'], ['магазин', 'в магазине'], ['торгов', 'в торговом центре'], ['кино', 'в кино'], ['больниц', 'в больнице'], ['хаб', 'в хабе'], ['баскетбол', 'на баскетболе'], ['футбол', 'на футболе'], ['зал', 'в зале'], ['степ', 'в степи'], ['балкон', 'на балконе'],
 ];
 
 // Детали, которые становятся «хвостом» названия
@@ -113,7 +113,7 @@ const DETAILS = [
   ['мяч', 'и мяч'], ['матч', 'и важный матч'], ['побед', 'и победа'], ['звёзд', 'под звёздами'],
   ['звезд', 'под звёздами'], ['музык', 'и музыка'], ['книг', 'и книга'], ['фильм', 'и кино'],
   ['котик', 'и кот'], ['кот ', 'и кот'], ['листь', 'и жёлтые листья'], ['торт', 'и торт'], ['костёр', 'у костра'],
-  ['костер', 'у костра'], ['фонар', 'под фонарями'], ['ветер', 'на ветру'],
+  ['костер', 'у костра'], ['фонар', 'под фонарями'], ['ветер', 'на ветру'], ['ванил', 'и запах ванили'], ['туман', 'в тумане'], ['гроз', 'и гроза'], ['шаурм', 'и шаурма'], ['плов', 'и плов'], ['баскет', 'и баскетбол'], ['смех', 'и смех'], ['смеял', 'и смех'], ['фото', 'и снимки на память'], ['прогул', 'и долгая прогулка'], ['гуля', 'и долгая прогулка'],
 ];
 
 const TIME_NOUN = {
@@ -203,7 +203,11 @@ export function analyzeText(text, dateStr) {
   const place = firstMatch(t, PLACES);
   const detail = firstMatch(t, DETAILS);
 
-  const title = makeTitle({ season, timeOfDay, place, detail, seasonExplicit: !!pickKey(t, SEASONS) });
+  const detail2 = DETAILS
+    .map(([stem, w]) => ({ w, i: t.indexOf(' ' + stem.replace(/ё/g, 'е')) }))
+    .filter((m) => m.i >= 0 && m.w !== detail)
+    .sort((a, b) => a.i - b.i)[0]?.w || null;
+  const title = makeTitle({ season, timeOfDay, timeExplicit: !!pickKey(t, TIMES), place, detail, detail2, seasonExplicit: !!pickKey(t, SEASONS), date: dateStr });
   const caption = pickCaption(text);
 
   return {
@@ -219,21 +223,32 @@ export function analyzeText(text, dateStr) {
   };
 }
 
-// Правило названий: 3–7 слов, «время/сезон + место + деталь», без слов-эмоций.
-export function makeTitle({ season, timeOfDay, place, detail, seasonExplicit }) {
+// Правило названий: 3–7 слов, «время + место + деталь», без слов-эмоций.
+// Сезон ставится, только если он есть в самом тексте: иначе почти каждое
+// название в ноябре начиналось бы с «Осенний…». Если деталей мало, вместо
+// пустых слов-заглушек используется дата («Вечер 20 ноября»).
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+export function makeTitle({ season, timeOfDay, timeExplicit = true, place, detail, detail2, seasonExplicit, date }) {
   const tn = TIME_NOUN[timeOfDay] || TIME_NOUN.day;
+  const words = (s) => (s ? s.split(' ').length : 0);
   const parts = [];
-  // Сезон в начале, если он есть в тексте или иначе название получится слишком коротким
-  const needSeason = seasonExplicit || !place || !detail;
-  if (needSeason && SEASON_ADJ[season]) parts.push(SEASON_ADJ[season][tn.g], tn.word.toLowerCase());
+  if (seasonExplicit && SEASON_ADJ[season]) parts.push(SEASON_ADJ[season][tn.g], tn.word.toLowerCase());
   else parts.push(tn.word);
   if (place) parts.push(place);
-  if (detail && !(place && detail.includes(place.split(' ').pop()))) parts.push(detail);
+  const usable = (d) => d && !(place && d.includes(place.split(' ').pop()));
+  if (usable(detail)) parts.push(detail);
   let title = parts.join(' ');
-  let n = title.split(' ').length;
-  if (n < 3) title += ' без спешки';
-  n = title.split(' ').length;
-  if (n > 7) title = title.split(' ').slice(0, 7).join(' ');
+  if (usable(detail2) && detail2.startsWith('и ') && detail2 !== detail && words(title) + words(detail2) <= 7) {
+    // второй хвост только вида «и …», чтобы не ломать падежи
+    title += ' ' + detail2;
+  }
+  if (words(title) < 3) {
+    const d = date ? new Date(date + 'T12:00:00') : null;
+    if (d && !isNaN(d)) title += ` ${d.getDate()} ${MONTHS_GEN[d.getMonth()]}`;
+    else if (!timeExplicit) title = 'Обычный день, который хочется запомнить';
+  }
+  if (words(title) > 7) title = title.split(' ').slice(0, 7).join(' ');
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 

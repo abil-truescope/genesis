@@ -37,6 +37,8 @@ export async function createDay(input, onStatus = () => {}) {
   const rules = analyzeText(text, date);
   const llm = await analyzeWithLlm(text, songDesc);
   const textA = mergeTextAnalysis(rules, llm);
+  const custom = (input.customTitle || '').trim().slice(0, 70);
+  if (custom) textA.title = custom;
 
   onStatus('Извлекаю палитру из фото');
   const photoA = await analyzeImages(images);

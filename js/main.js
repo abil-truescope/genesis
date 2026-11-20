@@ -22,6 +22,7 @@ import {
 import { syncAll, pushDay, deleteDayCloud, deleteAllCloud, onSyncStatus, syncStatus } from './cloud.js';
 import { PRIVACY_HTML, TERMS_HTML } from './privacy.js';
 import { POLICY_VERSION } from './config.js';
+import { setSeasonFor, seasonBgEnabled, setSeasonBgEnabled, SEASON_NAMES, seasonOf } from './season-bg.js';
 import { icon, toast, modal, confirmModal, stagger, greeting, longDate } from './ui.js';
 import { escapeHtml, loadImageFromBlob, toHex, rgbStr, formatDateRu } from './util.js';
 
@@ -262,6 +263,7 @@ async function route() {
   app.classList.remove('view-enter');
   void app.offsetWidth;
   app.classList.add('view-enter');
+  if (!h.startsWith('#new') && !h.startsWith('#day-')) setSeasonFor();
   if (h.startsWith('#new')) return viewNew();
   if (h.startsWith('#archive')) return viewArchive();
   if (h.startsWith('#day-')) return viewDay(decodeURIComponent(h.slice(5)));
@@ -406,6 +408,7 @@ function newDraft() {
     text: '',
     photos: [],
     palette: null,
+    customTitle: '',
     song: { tab: 'link', url: '', file: null, ownAudio: false, artist: '', title: '', genre: '', year: '', mood: '' },
   };
 }
@@ -416,27 +419,48 @@ function viewNew() {
   pendingDate = null;
   const st = draft;
   const steps = [['pen', 'Запись'], ['photo', 'Фото'], ['music', 'Песня']];
+  setSeasonFor(st.date);
+  const filled = draftFilled(st);
+  const doneN = filled.filter(Boolean).length;
   app.innerHTML = `
   <section class="wizard">
     <div class="wizard-head">
       <h1>Новый день</h1>
-      <ol class="stepper">${steps.map(([ic, l], i) => `<li class="${st.step === i + 1 ? 'on' : st.step > i + 1 ? 'done' : ''}"><button data-goto="${i + 1}" ${st.step > i ? '' : 'disabled'}><span class="dot">${st.step > i + 1 ? icon('check', 14) : icon(ic, 14)}</span>${l}</button></li>`).join('')}</ol>
-      <div class="progress"><i style="width:${((st.step - 1) / 2) * 100}%"></i></div>
+      <ol class="stepper" role="tablist">${steps.map(([ic, l], i) => `<li class="${st.step === i + 1 ? 'on' : ''} ${filled[i] ? 'done' : ''}"><button data-goto="${i + 1}" role="tab" aria-selected="${st.step === i + 1}"><span class="dot">${filled[i] && st.step !== i + 1 ? icon('check', 14) : icon(ic, 14)}</span>${l}</button></li>`).join('')}</ol>
+      <div class="progress"><i id="wz-prog" style="width:${(doneN / 3) * 100}%"></i></div>
     </div>
     <div class="wizard-body" id="wz"></div>
     <div class="wizard-foot">
       <button class="btn ghost" id="wz-back" ${st.step === 1 ? 'hidden' : ''}>${icon('left', 16)}Назад</button>
       <span class="spacer"></span>
       <span class="hint" id="wz-hint"></span>
-      <button class="btn primary" id="wz-next">${st.step === 3 ? `${icon('sparkle', 16)}Собрать воспоминание` : `Далее${icon('right', 16)}`}</button>
+      ${st.step < 3 ? `<button class="btn" id="wz-next">Далее${icon('right', 16)}</button>` : ''}
+      <button class="btn primary" id="wz-build">${icon('sparkle', 16)}Собрать воспоминание</button>
     </div>
   </section>`;
   $$('[data-goto]').forEach((b) => (b.onclick = () => { st.step = +b.dataset.goto; viewNew(); }));
   $('#wz-back').onclick = () => { st.step--; viewNew(); };
   const body = $('#wz');
   const next = $('#wz-next');
+  const build = $('#wz-build');
   const hint = $('#wz-hint');
-  const setValid = (ok, msg = '') => { next.disabled = !ok; hint.textContent = ok ? '' : msg; };
+  // «Далее» всегда доступна: шаги можно заполнять в любом порядке.
+  // «Собрать» активна, только когда есть текст, хотя бы одно фото и песня.
+  const refresh = () => {
+    const f = draftFilled(st);
+    const names = ['текст', 'фото', 'песня'];
+    const miss = names.filter((_, i) => !f[i]);
+    build.disabled = miss.length > 0;
+    hint.textContent = miss.length ? `Осталось: ${miss.join(', ')}` : 'Всё готово';
+    hint.classList.toggle('ok', !miss.length);
+    $$('.stepper li').forEach((li, i) => {
+      li.classList.toggle('done', f[i]);
+      if (i + 1 !== st.step) li.querySelector('.dot').innerHTML = f[i] ? icon('check', 14) : icon(steps[i][0], 14);
+    });
+    $('#wz-prog').style.width = `${(f.filter(Boolean).length / 3) * 100}%`;
+  };
+  if (next) next.onclick = () => { st.step++; viewNew(); };
+  build.onclick = () => { if (!build.disabled) buildDay(); };
 
   if (st.step === 1) {
     body.innerHTML = `
@@ -450,7 +474,14 @@ function viewNew() {
         </div>
         <aside class="live" aria-live="polite">
           <p class="eyebrow">${icon('sparkle', 14)} Дневник слышит</p>
-          <div class="live-title"><small>Папка будет называться</small><b id="lv-title">…</b></div>
+          <div class="live-title">
+            <label for="lv-title"><small>Папка будет называться</small></label>
+            <div class="title-edit">
+              <input id="lv-title" value="${escapeHtml(st.customTitle)}" maxlength="70" placeholder="…" autocomplete="off">
+              <button type="button" class="icon-btn sm" id="lv-reset" ${st.customTitle ? '' : 'hidden'} title="Вернуть название, которое предлагает дневник" aria-label="Вернуть авто-название">${icon('close', 14)}</button>
+            </div>
+            <small class="fine" id="lv-note">${st.customTitle ? 'Своё название' : 'Подбирается по тексту — можно исправить'}</small>
+          </div>
           <div class="bars" id="lv-bars"></div>
           <p class="fine">Оценки обновляются по мере письма. Это художественный инструмент, а не диагностика.</p>
         </aside>
@@ -458,16 +489,25 @@ function viewNew() {
     const ta = $('#f-text');
     const upd = () => {
       st.text = ta.value; st.date = $('#f-date').value || localISO();
-      const ok = st.text.trim().length >= 10;
-      setValid(ok, 'Напишите хотя бы одно предложение');
+      refresh();
+      setSeasonFor(st.date);
       const a = analyzeText(st.text || ' ', st.date);
-      $('#lv-title').textContent = st.text.trim().length > 3 ? a.title : '…';
+      autoTitle = st.text.trim().length > 3 ? a.title : '';
+      if (!st.customTitle) { $('#lv-title').value = autoTitle; $('#lv-title').placeholder = autoTitle || '…'; }
       const ax = a.axes;
       $('#lv-bars').innerHTML = [['настроение', ax.valence], ['энергия', ax.energy], ['теплота', ax.warmth], ['напряжение', ax.tension], ['ностальгия', ax.nostalgia]]
         .map(([n, v]) => `<div class="bar"><span>${n}</span><i style="--v:${st.text.trim() ? v : 0}"></i></div>`).join('');
     };
-    let t;
-    ta.oninput = () => { clearTimeout(t); t = setTimeout(upd, 180); st.text = ta.value; setValid(ta.value.trim().length >= 10, 'Напишите хотя бы одно предложение'); };
+    let t, autoTitle = '';
+    ta.oninput = () => { clearTimeout(t); t = setTimeout(upd, 180); st.text = ta.value; refresh(); };
+    const ti = $('#lv-title');
+    ti.oninput = () => {
+      const v = ti.value.trim();
+      st.customTitle = v && v !== autoTitle ? v : '';
+      $('#lv-reset').hidden = !st.customTitle;
+      $('#lv-note').textContent = st.customTitle ? 'Своё название' : 'Подбирается по тексту — можно исправить';
+    };
+    $('#lv-reset').onclick = () => { st.customTitle = ''; ti.value = autoTitle; ti.oninput(); };
     $('#f-date').onchange = upd;
     $$('.prompts .chip').forEach((c) => (c.onclick = () => {
       ta.focus();
@@ -476,7 +516,6 @@ function viewNew() {
     }));
     upd();
     setTimeout(() => ta.focus(), 50);
-    next.onclick = () => { st.step = 2; viewNew(); };
   }
 
   if (st.step === 2) {
@@ -492,7 +531,7 @@ function viewNew() {
     const prev = $('#f-prev');
     const renderPrev = async () => {
       prev.innerHTML = st.photos.map((p, k) => `<figure class="pv" style="--i:${k}"><img src="${objUrl(p)}" alt=""><button class="icon-btn" data-k="${k}" aria-label="Убрать фото">${icon('close', 14)}</button></figure>`).join('');
-      setValid(st.photos.length > 0, 'Добавьте минимум одно фото');
+      refresh();
       const box = $('#f-pal');
       if (!st.photos.length) { box.hidden = true; return; }
       const imgs = await Promise.all(st.photos.map(loadImageFromBlob));
@@ -510,7 +549,6 @@ function viewNew() {
     drop.ondragleave = () => drop.classList.remove('over');
     drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); add(e.dataTransfer.files); };
     renderPrev();
-    next.onclick = () => { st.step = 3; viewNew(); };
   }
 
   if (st.step === 3) {
@@ -547,8 +585,7 @@ function viewNew() {
       $('#f-own-note').hidden = s.ownAudio;
       const l = parseSongLink(s.url);
       $('#f-url-hint').innerHTML = l ? `${icon('check', 14)} ${escapeHtml(l.service)}${l.embed ? ' — будет играть при просмотре записи' : ' — откроется по ссылке'}` : '';
-      const ok = Boolean(s.url || (s.tab === 'file' && s.file) || s.artist || s.title);
-      setValid(ok, 'Добавьте ссылку, файл или хотя бы исполнителя');
+      refresh();
     };
     $$('.seg button').forEach((b) => (b.onclick = () => {
       s.tab = b.dataset.tab;
@@ -565,9 +602,11 @@ function viewNew() {
       sync();
     };
     sync();
-    next.onclick = () => buildDay();
   }
 }
+
+function songFilled(s) { return Boolean(s.url || (s.tab === 'file' && s.file) || s.artist || s.title); }
+function draftFilled(st) { return [st.text.trim().length >= 10, st.photos.length > 0, songFilled(st.song)]; }
 
 async function buildDay() {
   const st = draft;
@@ -575,6 +614,7 @@ async function buildDay() {
   const input = {
     date: st.date,
     text: st.text.trim(),
+    customTitle: st.customTitle,
     photos: st.photos,
     song: {
       url: s.url,
@@ -740,6 +780,7 @@ async function viewDay(id) {
   const mood = p.mood;
   const bars = [['настроение', mood.valence], ['энергия', mood.energy], ['напряжение', mood.tension], ['теплота', mood.warmth], ['ностальгия', mood.nostalgia], ['с людьми', mood.social]];
   const hasAudio = s.kind === 'file' && s.blob;
+  setSeasonFor(day.date);
 
   app.innerHTML = `
   <section class="day">
@@ -762,7 +803,7 @@ async function viewDay(id) {
     </div>
     <aside class="folder-panel">
       <p class="eyebrow">${escapeHtml(formatDateRu(new Date(day.date)))} · стр. ${day.pageNo || 1}</p>
-      <h1 class="day-title">${icon('folder', 26)} ${escapeHtml(day.title)}</h1>
+      <h1 class="day-title">${icon('folder', 26)} <span id="d-title">${escapeHtml(day.title)}</span><button class="icon-btn sm rename" id="d-rename" title="Переименовать" aria-label="Переименовать день">${icon('pen', 16)}</button></h1>
       <div class="chips"><span class="chip on">${escapeHtml(S.name)}</span>${p.film ? '<span class="chip">плёнка</span>' : ''}<span class="chip">${p.bpm} bpm</span><span class="chip">голос: ${escapeHtml(p.voice.character)}</span></div>
       <div class="seg tabs" role="tablist"><button class="on" data-t="folder" role="tab">${icon('folder', 15)}Папка</button><button data-t="why" role="tab">${icon('why', 15)}Почему так?</button></div>
       <div data-tp="folder">
@@ -788,6 +829,24 @@ async function viewDay(id) {
       <button class="btn ghost danger sm" id="d-del">${icon('trash', 15)}Удалить день</button>
     </aside>
   </section>`;
+
+  $('#d-rename').onclick = async () => {
+    let val = null;
+    const ok = await modal({
+      title: 'Название дня',
+      body: `<label class="field"><span>Как назвать папку</span><input id="rn-in" maxlength="70" value="${escapeHtml(day.title)}" autocomplete="off"></label>`,
+      actions: [{ label: 'Отмена', value: false }, { label: `${icon('check', 16)}Сохранить`, kind: 'primary', value: true, validate: (w) => { val = w.querySelector('#rn-in').value.trim(); return val.length > 0; } }],
+      onMount: (w) => { const i = w.querySelector('#rn-in'); i.focus(); i.select(); i.onkeydown = (e) => { if (e.key === 'Enter') w.querySelector('.modal-actions .primary').click(); }; },
+    });
+    if (!ok || !val || val === day.title) return;
+    day.title = val.slice(0, 70);
+    day.syncedAt = null;
+    await saveDay(day);
+    pushInBackground(day);
+    $('#d-title').textContent = day.title;
+    renderer.day = day; renderer.draw?.(0);
+    toast('Название сохранено');
+  };
 
   $$('.tabs button').forEach((b) => (b.onclick = () => {
     $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
@@ -928,6 +987,11 @@ async function viewSettings() {
         <p class="status-line" id="demo-status"></p>
       </div>
       <div class="set-card">
+        <h3>${icon('sparkle', 18)} Оформление</h3>
+        <p class="muted">Фон сайта меняется по сезону даты: зимой снег, весной лепестки и трава, летом солнце и море, осенью листья. В записи и на странице дня сезон берётся из её даты.</p>
+        <label class="switch"><input type="checkbox" id="s-season" ${seasonBgEnabled() ? 'checked' : ''}><span class="track"></span><span>Сезонный фон <small class="muted">(сейчас: ${SEASON_NAMES[seasonOf()]})</small></span></label>
+      </div>
+      <div class="set-card">
         <h3>${icon('shield', 18)} Конфиденциальность</h3>
         <p class="muted">Никакой аналитики и рекламы. Оценки настроения — не диагностика.</p>
         <div class="btn-col"><a class="btn" href="#privacy">Политика конфиденциальности</a><a class="btn" href="#terms">Условия использования</a></div>
@@ -951,6 +1015,7 @@ async function viewSettings() {
     setLlmSettings({ apiKey: $('#s-key').value.trim(), model: $('#s-model').value.trim() || 'gemini-2.5-flash' });
     toast('Настройки сохранены');
   };
+  $('#s-season').onchange = (e) => { setSeasonBgEnabled(e.target.checked); if (e.target.checked) setSeasonFor(); toast(e.target.checked ? 'Сезонный фон включён' : 'Сезонный фон выключен'); };
   $('#s-demo').onclick = (e) => addDemoDays(e.currentTarget, $('#demo-status'));
   $('#s-export').onclick = async () => {
     const files = [];
