@@ -14,7 +14,7 @@ Web Speech API (озвучка), MediaRecorder + captureStream (видео), Ind
 
 **Внешние ресурсы:**
 - Google Fonts: Cormorant Garamond, Caveat, Inter, JetBrains Mono (лицензия OFL);
-- Google Identity Services — вход через Google;
+- Supabase (Postgres, Auth, Storage, Edge Functions) и библиотека supabase-js — аккаунты и облачное хранение;
 - embed-плееры Spotify, YouTube, Яндекс Музыки, Apple Music и SoundCloud — для песен по ссылке;
 - *необязательно:* Google Gemini API для анализа текста (ключ пользователя хранится в его браузере).
 

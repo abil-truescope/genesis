@@ -1,25 +1,21 @@
-# Как включить «Войти через Google» (10 минут)
+# Как включить «Войти через Google» (15 минут, по желанию)
 
-Вход работает без своего сервера через Google Identity Services. Нужен только **Client ID**. Он не секретный, его можно хранить в публичном репозитории.
+Вход по почте и паролю уже работает. Google — дополнительная кнопка; её включают в два шага.
 
-1. Откройте https://console.cloud.google.com/ и войдите в Google-аккаунт.
-2. Сверху: **Select a project → New project**, название `atmosphere-diary` → **Create**.
-3. Меню **APIs & Services → OAuth consent screen**:
-   - User type: **External** → Create;
-   - App name: `Дневник атмосферы`, support email — ваша почта;
-   - App domain → Privacy policy: `https://abil-truescope.github.io/genesis/#privacy`;
-   - Developer contact — ваша почта → **Save and continue** до конца;
-   - на вкладке **Audience / Test users** добавьте почты тех, кто будет входить (себя и жюри, если знаете), или нажмите **Publish app**.
-4. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
-   - Application type: **Web application**;
-   - Authorized JavaScript origins: `https://abil-truescope.github.io` и для локальной проверки `http://localhost:5173`;
-   - **Create** → скопируйте **Client ID** (вида `1234-abc.apps.googleusercontent.com`).
-5. Вставьте его в `js/config.js`:
-   ```js
-   export const GOOGLE_CLIENT_ID = '1234-abc.apps.googleusercontent.com';
-   ```
-6. Закоммитьте и запушьте. Через 1–2 минуты кнопка заработает на сайте.
+## 1. Google Cloud: получить Client ID и Secret
 
-**Что получает приложение:** имя, почту и аватар из ID-токена. Они хранятся только в браузере пользователя и нужны, чтобы у каждого аккаунта на устройстве был свой дневник. Пароль приложение не видит.
+1. https://console.cloud.google.com/ → **New project** → `atmosphere-diary`.
+2. **APIs & Services → OAuth consent screen:** External, имя `Дневник атмосферы`, ваша почта;
+   Privacy policy: `https://abil-truescope.github.io/genesis/#privacy` → сохранить → **Publish app**.
+3. **Credentials → Create credentials → OAuth client ID → Web application:**
+   - Authorized JavaScript origins: `https://abil-truescope.github.io`
+   - Authorized redirect URIs: `https://jnpbvtrhodsypuwlftga.supabase.co/auth/v1/callback`
+   - Create → скопируйте **Client ID** и **Client secret**.
 
-**Если кнопка не появляется:** проверьте, что адрес сайта точно совпадает с Authorized JavaScript origin (без `/genesis` в конце), и подождите несколько минут — Google применяет изменения не сразу.
+## 2. Supabase: включить провайдера
+
+1. https://supabase.com/dashboard/project/jnpbvtrhodsypuwlftga/auth/providers → **Google** → Enable.
+2. Вставьте Client ID и Client secret → Save.
+3. В `js/config.js` поставьте `export const GOOGLE_ENABLED = true;`, закоммитьте и запушьте.
+
+После этого в окне входа появится кнопка «Войти через Google». Secret хранится только в Supabase, в код он не попадает.

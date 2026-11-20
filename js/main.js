@@ -15,7 +15,11 @@ import { getLlmSettings, setLlmSettings } from './analyze/llm.js';
 import { speak, stopSpeaking, voiceAvailable, isSpeaking } from './voice.js';
 import { recordVideo, dayFolderZip, download, safeName, makeZip } from './export.js';
 import { DEMO_DAYS, buildDemoInput } from './demo.js';
-import { currentUser, onAuthChange, renderGoogleButton, signOut, googleConfigured, databaseFor } from './auth.js';
+import {
+  currentUser, onAuthChange, signUp, signIn, signInWithGoogle, signOut, googleConfigured, databaseFor,
+  humanError, initAuth, deleteAccount, resetPassword,
+} from './auth.js';
+import { syncAll, pushDay, deleteDayCloud, deleteAllCloud, onSyncStatus, syncStatus } from './cloud.js';
 import { PRIVACY_HTML, TERMS_HTML } from './privacy.js';
 import { POLICY_VERSION } from './config.js';
 import { icon, toast, modal, confirmModal, stagger, greeting, longDate } from './ui.js';
@@ -49,8 +53,10 @@ function cleanup() {
     stopSpeaking();
     active = null;
   }
-  urls.forEach((u) => URL.revokeObjectURL(u));
+  // освобождаем картинки прошлого экрана с задержкой, чтобы он не мигал пустыми рамками
+  const old = urls;
   urls = [];
+  setTimeout(() => old.forEach((u) => URL.revokeObjectURL(u)), 4000);
 }
 
 // ================= Каркас =================
@@ -63,7 +69,7 @@ function renderUserSlot() {
   const u = currentUser();
   if (!u) {
     slot.innerHTML = `<button class="btn ghost sm" id="btn-login">${icon('user', 16)}<span>Войти</span></button>`;
-    $('#btn-login').onclick = openLogin;
+    $('#btn-login').onclick = () => openLogin('in');
     return;
   }
   const initials = (u.name || u.email || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
@@ -73,7 +79,7 @@ function renderUserSlot() {
         ${u.picture ? `<img src="${escapeHtml(u.picture)}" alt="" referrerpolicy="no-referrer">` : `<span>${escapeHtml(initials)}</span>`}
       </button>
       <div class="menu" id="user-dd" hidden>
-        <div class="menu-head"><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.email)}</small></div>
+        <div class="menu-head"><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.email)}</small><span class="sync-line" id="sync-line"></span></div>
         <a href="#settings" class="menu-item">${icon('settings', 16)}Настройки</a>
         <a href="#privacy" class="menu-item">${icon('shield', 16)}Конфиденциальность</a>
         <button class="menu-item" id="btn-logout">${icon('logout', 16)}Выйти</button>
@@ -89,9 +95,31 @@ function renderUserSlot() {
   };
   document.addEventListener('click', () => { dd.hidden = true; dd.classList.remove('in'); }, { once: true });
   $('#btn-logout').onclick = async () => {
-    signOut();
+    await signOut();
     toast('Вы вышли. Открыт гостевой дневник');
   };
+  paintSync();
+}
+
+function syncText(st) {
+  if (st.state === 'syncing') return 'синхронизация…';
+  if (st.state === 'error') return 'нет связи с облаком — данные на устройстве';
+  if (st.state === 'ok') return 'сохранено в облаке';
+  return 'облако';
+}
+function paintSync() {
+  const st = syncStatus();
+  const el = document.getElementById('sync-line');
+  if (el) { el.className = 'sync-line ' + st.state; el.textContent = syncText(st); }
+  const av = document.getElementById('btn-user');
+  if (av) av.dataset.sync = st.state;
+}
+onSyncStatus(paintSync);
+
+// фоновая отправка дня в облако
+function pushInBackground(day) {
+  if (!currentUser()) return;
+  pushDay(day).catch((e) => { console.warn(e); toast('День сохранён на устройстве; в облако отправлю позже', 'error', 4000); });
 }
 
 function applyUser() {
@@ -99,24 +127,82 @@ function applyUser() {
   renderUserSlot();
 }
 
-async function openLogin() {
-  const configured = googleConfigured();
+async function openLogin(initialTab = 'in') {
   let off = null;
   await modal({
-    title: 'Вход в дневник',
+    title: 'Аккаунт',
     body: `
-      <p class="muted">Аккаунт нужен, чтобы у каждого был свой дневник на этом устройстве. Записи по-прежнему хранятся только у вас в браузере — на сервер они не уходят.</p>
-      <div class="gbtn-wrap" id="gbtn">${configured ? '<div class="spinner"></div>' : ''}</div>
-      ${configured ? '' : `<div class="notice">${icon('shield', 16)}<span>Вход через Google ещё не подключён: владельцу сайта нужно указать Client ID (см. <code>docs/GOOGLE_SIGNIN.md</code>). Пока можно пользоваться дневником как гость.</span></div>`}
-      <p class="fine">Продолжая, вы соглашаетесь с <a href="#privacy">политикой конфиденциальности</a> и <a href="#terms">условиями</a>.</p>`,
-    actions: [{ label: 'Продолжить как гость', value: 'guest' }],
-    onMount: async (wrap, close) => {
+      <div class="seg auth-tabs" role="tablist"><button data-tab="in" role="tab">Вход</button><button data-tab="up" role="tab">Регистрация</button></div>
+      <p class="muted auth-lead" id="au-lead"></p>
+      <form class="auth-form" id="au-form" novalidate>
+        <label class="field" data-only="up"><span>Как к вам обращаться</span><input id="au-name" autocomplete="name" maxlength="80" placeholder="Имя"></label>
+        <label class="field"><span>Почта</span><input id="au-email" type="email" autocomplete="email" required placeholder="you@example.com"></label>
+        <label class="field"><span>Пароль</span>
+          <span class="pw"><input id="au-pass" type="password" autocomplete="current-password" minlength="6" required placeholder="минимум 6 символов"><button type="button" class="icon-btn" id="au-eye" aria-label="Показать пароль">${icon('why', 16)}</button></span>
+        </label>
+        <label class="check" data-only="up"><input type="checkbox" id="au-consent"><span>Согласен(на) с <a href="#privacy" target="_blank">политикой конфиденциальности</a> и <a href="#terms" target="_blank">условиями</a></span></label>
+        <p class="err" id="au-err" role="alert"></p>
+        <button class="btn primary lg wide" id="au-submit" type="submit"></button>
+        <button class="btn ghost sm" type="button" id="au-forgot" data-only="in">Забыли пароль?</button>
+      </form>
+      ${googleConfigured() ? `<div class="or"><span>или</span></div><button class="btn lg wide" id="au-google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Войти через Google</button>` : ''}
+      <p class="fine">Без аккаунта дневник тоже работает — тогда он хранится только в этом браузере.</p>`,
+    actions: [{ label: 'Продолжить как гость', kind: 'ghost', value: 'guest' }],
+    onMount: (wrap, close) => {
       off = onAuthChange((u) => { if (u) close('ok'); });
+      let tab = initialTab;
+      const q = (sel) => wrap.querySelector(sel);
+      const setTab = (t) => {
+        tab = t;
+        wrap.querySelectorAll('.auth-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+        wrap.querySelectorAll('[data-only]').forEach((el) => (el.hidden = el.dataset.only !== t));
+        q('#au-submit').textContent = t === 'up' ? 'Создать аккаунт' : 'Войти';
+        q('#au-lead').textContent = t === 'up'
+          ? 'Аккаунт сохраняет дневник в облаке: он не пропадёт при очистке браузера и откроется на телефоне и ноутбуке.'
+          : 'Войдите, чтобы открыть свой дневник на любом устройстве.';
+        q('#au-pass').autocomplete = t === 'up' ? 'new-password' : 'current-password';
+        q('#au-err').textContent = '';
+      };
+      wrap.querySelectorAll('.auth-tabs button').forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
+      q('#au-eye').onclick = () => { const i = q('#au-pass'); i.type = i.type === 'password' ? 'text' : 'password'; };
+      q('#au-forgot').onclick = async () => {
+        const email = q('#au-email').value.trim();
+        if (!email) { q('#au-err').textContent = 'Введите почту, и мы пришлём ссылку для нового пароля'; q('#au-email').focus(); return; }
+        try { await resetPassword(email); toast('Письмо для смены пароля отправлено'); }
+        catch (e) { q('#au-err').textContent = humanError(e); }
+      };
+      q('#au-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const err = q('#au-err');
+        const email = q('#au-email').value.trim();
+        const password = q('#au-pass').value;
+        const name = q('#au-name').value.trim();
+        if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Проверьте адрес почты'; return; }
+        if (password.length < 6) { err.textContent = 'Пароль: минимум 6 символов'; return; }
+        if (tab === 'up' && !q('#au-consent').checked) { err.textContent = 'Нужно согласие с политикой конфиденциальности'; q('#au-consent').closest('.check').classList.add('shake'); setTimeout(() => q('#au-consent').closest('.check').classList.remove('shake'), 500); return; }
+        const btn = q('#au-submit');
+        btn.disabled = true; btn.classList.add('loading');
+        err.textContent = '';
+        try {
+          if (tab === 'up') {
+            const r = await signUp({ email, password, name: name || email.split('@')[0] });
+            if (r.needsConfirm) {
+              q('#au-form').innerHTML = `<div class="sent">${icon('check', 28)}<h3>Почти готово</h3><p>Мы отправили письмо на <b>${escapeHtml(email)}</b>. Откройте его и нажмите ссылку — после этого войдите здесь.</p></div>`;
+            }
+          } else {
+            await signIn({ email, password });
+          }
+        } catch (ex) {
+          err.textContent = humanError(ex);
+        } finally {
+          btn.disabled = false; btn.classList.remove('loading');
+        }
+      };
+      const g = q('#au-google');
+      if (g) g.onclick = async () => { try { await signInWithGoogle(); } catch (ex) { q('#au-err').textContent = humanError(ex); } };
       wrap.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener('click', () => close(null)));
-      if (configured) {
-        try { await renderGoogleButton(wrap.querySelector('#gbtn')); wrap.querySelector('.spinner')?.remove(); }
-        catch (e) { wrap.querySelector('#gbtn').innerHTML = `<p class="err">${escapeHtml(e.message)}</p>`; }
-      }
+      setTab(initialTab);
+      setTimeout(() => q(tab === 'up' ? '#au-name' : '#au-email').focus(), 80);
     },
   });
   off && off();
@@ -133,7 +219,7 @@ async function offerMigration() {
     actions: [{ label: 'Оставить в гостевом', value: false }, { label: 'Перенести', kind: 'primary', value: true }],
   });
   if (!ok) return;
-  for (const d of guest) await saveDay(d);
+  for (const d of guest) { d.syncedAt = null; d.cloud = false; await saveDay(d); }
   await clearDatabase('artech-diary');
   toast(`Перенесено: ${guest.length}`);
 }
@@ -149,7 +235,7 @@ async function ensureConsent() {
     body: `
       <p class="lead-sm">Пишете, как прошёл день, добавляете фото и песню — дневник превращает это в живую страницу, которая передаёт, <i>как день ощущался</i>.</p>
       <ul class="consent-list">
-        <li>${icon('shield', 18)}<span><b>Всё хранится у вас.</b> Записи, фото и настройки остаются в этом браузере. Сервера с вашими данными нет.</span></li>
+        <li>${icon('shield', 18)}<span><b>Ваши данные — только ваши.</b> Без аккаунта дневник хранится в этом браузере, с аккаунтом — ещё и в закрытом облаке, доступном только вам.</span></li>
         <li>${icon('music', 18)}<span><b>Музыка — по ссылке.</b> Чужие песни не сохраняются: файл только анализируется, а играет официальный плеер сервиса.</span></li>
         <li>${icon('sparkle', 18)}<span><b>Не диагностика.</b> Оценки настроения нужны, чтобы оформить страницу, а не чтобы оценивать вас.</span></li>
       </ul>
@@ -297,7 +383,8 @@ async function addDemoDays(btn, st) {
     for (let k = 0; k < DEMO_DAYS.length; k++) {
       st.textContent = `Демо-день ${k + 1} из ${DEMO_DAYS.length}: синтезирую фото и музыку…`;
       const input = await buildDemoInput(DEMO_DAYS[k], k);
-      await createDay(input, (s) => (st.textContent = `Демо-день ${k + 1}/${DEMO_DAYS.length}: ${s}`));
+      const d = await createDay(input, (s) => (st.textContent = `Демо-день ${k + 1}/${DEMO_DAYS.length}: ${s}`));
+      pushInBackground(d);
     }
     toast('Добавлено 5 демо-дней');
     route();
@@ -533,6 +620,7 @@ async function buildDay() {
     });
     $$('.build-steps li').forEach((li) => { li.classList.add('done'); li.classList.remove('now'); });
     draft = null;
+    pushInBackground(day);
     toast(`Сохранено: «${day.title}»`);
     setTimeout(() => { location.hash = '#day-' + day.id; }, 650);
   } catch (e) {
@@ -792,6 +880,7 @@ async function viewDay(id) {
   };
   $('#d-del').onclick = async () => {
     if (!(await confirmModal('Удалить день?', `«${day.title}» исчезнет из дневника. Это нельзя отменить.`))) return;
+    try { await deleteDayCloud(day); } catch (e) { toast('Не удалось удалить из облака: ' + humanError(e), 'error', 5000); return; }
     await deleteDay(day.id);
     toast('День удалён');
     location.hash = '#archive';
@@ -812,10 +901,14 @@ async function viewSettings() {
         <h3>${icon('user', 18)} Аккаунт</h3>
         ${u ? `
           <div class="profile">${u.picture ? `<img src="${escapeHtml(u.picture)}" alt="" referrerpolicy="no-referrer">` : ''}<div><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.email)}</small></div></div>
-          <p class="fine">У этого аккаунта свой дневник на этом устройстве.</p>
-          <button class="btn" id="s-logout">${icon('logout', 16)}Выйти</button>`
-        : `<p class="muted">Вы в гостевом режиме. Войдите, чтобы вести свой дневник отдельно от других людей на этом устройстве.</p>
-          <button class="btn primary" id="s-login">${icon('user', 16)}Войти через Google</button>`}
+          <p class="sync-line ${syncStatus().state}" id="sync-line">${syncText(syncStatus())}</p>
+          <div class="btn-col">
+            <button class="btn" id="s-sync">${icon('upload', 16)}Синхронизировать сейчас</button>
+            <button class="btn" id="s-logout">${icon('logout', 16)}Выйти</button>
+            <button class="btn ghost danger" id="s-delacc">${icon('trash', 16)}Удалить аккаунт</button>
+          </div>`
+        : `<p class="muted">Вы в гостевом режиме: дневник хранится только в этом браузере. С аккаунтом он сохраняется в облаке и открывается на любом устройстве.</p>
+          <div class="btn-col"><button class="btn primary" id="s-signup">${icon('user', 16)}Зарегистрироваться</button><button class="btn" id="s-login">Войти</button></div>`}
       </div>
       <div class="set-card">
         <h3>${icon('sparkle', 18)} Анализ текста (по желанию)</h3>
@@ -826,7 +919,7 @@ async function viewSettings() {
       </div>
       <div class="set-card">
         <h3>${icon('folder', 18)} Мои данные</h3>
-        <p class="muted">${days.length} ${plural(days.length, 'день', 'дня', 'дней')} в этом дневнике. Данные лежат только в этом браузере.</p>
+        <p class="muted">${days.length} ${plural(days.length, 'день', 'дня', 'дней')} в этом дневнике. ${u ? 'Хранятся на устройстве и в облаке аккаунта.' : 'Хранятся только в этом браузере.'}</p>
         <div class="btn-col">
           <button class="btn" id="s-export" ${days.length ? '' : 'disabled'}>${icon('download', 16)}Экспорт всех данных (.zip)</button>
           <button class="btn" id="s-demo">${icon('sparkle', 16)}Добавить 5 демо-дней</button>
@@ -841,8 +934,19 @@ async function viewSettings() {
       </div>
     </div>
   </section>`;
-  $('#s-logout') && ($('#s-logout').onclick = () => { signOut(); toast('Вы вышли'); });
-  $('#s-login') && ($('#s-login').onclick = openLogin);
+  $('#s-logout') && ($('#s-logout').onclick = async () => { await signOut(); toast('Вы вышли'); });
+  $('#s-login') && ($('#s-login').onclick = () => openLogin('in'));
+  $('#s-signup') && ($('#s-signup').onclick = () => openLogin('up'));
+  $('#s-sync') && ($('#s-sync').onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    try { const r = await syncAll(); toast(`Синхронизировано: загружено ${r.pulled}, отправлено ${r.pushed}`); route(); }
+    catch (err) { toast(humanError(err), 'error'); e.currentTarget.disabled = false; }
+  });
+  $('#s-delacc') && ($('#s-delacc').onclick = async () => {
+    if (!(await confirmModal('Удалить аккаунт?', 'Аккаунт, все дни и фото будут удалены с сервера и с этого устройства. Восстановить их будет нельзя.', 'Удалить аккаунт'))) return;
+    try { await deleteAllDays(); await deleteAccount(); toast('Аккаунт удалён'); location.hash = '#home'; }
+    catch (err) { toast('Не удалось удалить аккаунт: ' + humanError(err), 'error', 5000); }
+  });
   $('#s-save').onclick = () => {
     setLlmSettings({ apiKey: $('#s-key').value.trim(), model: $('#s-model').value.trim() || 'gemini-2.5-flash' });
     toast('Настройки сохранены');
@@ -858,7 +962,10 @@ async function viewSettings() {
     toast('Экспорт готов');
   };
   $('#s-wipe').onclick = async () => {
-    if (!(await confirmModal('Удалить все данные?', `Все ${days.length} ${plural(days.length, 'день', 'дня', 'дней')} этого дневника будут удалены без возможности восстановления. Сначала можно сделать экспорт.`, 'Удалить всё'))) return;
+    if (!(await confirmModal('Удалить все данные?', `Все ${days.length} ${plural(days.length, 'день', 'дня', 'дней')} этого дневника будут удалены${u ? ' с устройства и из облака' : ''} без возможности восстановления. Сначала можно сделать экспорт.`, 'Удалить всё'))) return;
+    if (currentUser()) {
+      try { await deleteAllCloud(); } catch (e) { toast('Не удалось удалить из облака: ' + humanError(e), 'error', 5000); return; }
+    }
     await deleteAllDays();
     toast('Все данные удалены');
     route();
@@ -871,16 +978,18 @@ function viewDoc(kind) {
 }
 
 // ================= Запуск =================
-onAuthChange(async (u) => {
+onAuthChange(async (u, event) => {
   applyUser();
-  if (u) { toast(`Привет, ${u.givenName || u.name}!`); await offerMigration(); }
+  if (u && event !== 'INITIAL') { toast(`Привет, ${u.givenName || u.name}!`); await offerMigration(); }
   route();
+  if (u) syncAll().then((r) => { if (r.pulled) route(); }).catch(() => {});
 });
 
 window.addEventListener('hashchange', route);
 (async () => {
   applyUser();
   route();
+  initAuth().then(() => { if (currentUser()) syncAll().then((r) => { if (r.pulled) route(); }).catch(() => {}); });
   const h = location.hash;
   if (!h.startsWith('#privacy') && !h.startsWith('#terms')) await ensureConsent();
 })();
