@@ -649,6 +649,13 @@ code { font: 12.5px var(--mono); background: var(--surface-2); padding: 1px 5px;
 
 /* Страница никогда не должна ехать вбок: на iOS это уменьшает масштаб и обрезает поля */
 html, body { overflow-x: clip; max-width: 100%; }
+
+/* Размытые свечения (blur) Safari на iOS считает частью ширины страницы и сжимает всю страницу.
+   Обрезаем всё, что выходит за боковые края контента (по вертикали ничего не режется). */
+main { overflow-x: clip; }
+@media (max-width: 600px) {
+  .canvas-wrap::before { inset: 6% 4% 0; filter: blur(22px); }
+}
 </style>
 </head>
 <body>
