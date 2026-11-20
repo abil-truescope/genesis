@@ -95,7 +95,8 @@ export function modal({ title = '', body = '', actions = [], dismissible = true,
       if (e.target === wrap && dismissible) close(null);
     });
     if (onMount) onMount(wrap, close);
-    setTimeout(() => wrap.querySelector('.modal-actions .btn.primary, .modal-actions .btn')?.focus(), 50);
+    // фокус на кнопку, только если окно само не поставило его в поле ввода
+    setTimeout(() => { if (!wrap.contains(document.activeElement)) wrap.querySelector('.modal-actions .btn.primary, .modal-actions .btn')?.focus(); }, 50);
   });
 }
 
