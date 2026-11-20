@@ -22,6 +22,7 @@ import {
 import { syncAll, pushDay, deleteDayCloud, deleteAllCloud, onSyncStatus, syncStatus } from './cloud.js';
 import { PRIVACY_HTML, TERMS_HTML } from './privacy.js';
 import { POLICY_VERSION } from './config.js';
+import { datePicker } from './datepicker.js';
 import { setSeasonFor, seasonBgEnabled, setSeasonBgEnabled, SEASON_NAMES, seasonOf } from './season-bg.js';
 import { icon, toast, modal, confirmModal, stagger, greeting, longDate } from './ui.js';
 import { escapeHtml, loadImageFromBlob, toHex, rgbStr, formatDateRu } from './util.js';
@@ -466,7 +467,7 @@ function viewNew() {
     body.innerHTML = `
       <div class="two-col">
         <div>
-          <label class="field"><span>Дата</span><input type="date" id="f-date" value="${st.date}" max="${localISO()}"></label>
+          <div class="field"><span>Когда это было</span><div id="f-date"></div></div>
           <label class="field"><span>Как прошёл день?</span>
             <textarea id="f-text" rows="8" placeholder="Гуляли по парку, всё в жёлтых листьях, было холодно, но мы пили какао и долго разговаривали…">${escapeHtml(st.text)}</textarea>
           </label>
@@ -488,7 +489,7 @@ function viewNew() {
       </div>`;
     const ta = $('#f-text');
     const upd = () => {
-      st.text = ta.value; st.date = $('#f-date').value || localISO();
+      st.text = ta.value;
       refresh();
       setSeasonFor(st.date);
       const a = analyzeText(st.text || ' ', st.date);
@@ -508,7 +509,8 @@ function viewNew() {
       $('#lv-note').textContent = st.customTitle ? 'Своё название' : 'Подбирается по тексту — можно исправить';
     };
     $('#lv-reset').onclick = () => { st.customTitle = ''; ti.value = autoTitle; ti.oninput(); };
-    $('#f-date').onchange = upd;
+    const dp = datePicker($('#f-date'), { value: st.date, max: localISO(), onChange: (d) => { st.date = d; upd(); } });
+    listDays().then((ds) => dp.mark(new Set(ds.map((d) => d.date)))).catch(() => {});
     $$('.prompts .chip').forEach((c) => (c.onclick = () => {
       ta.focus();
       ta.placeholder = c.dataset.p;
