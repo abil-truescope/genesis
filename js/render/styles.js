@@ -40,18 +40,24 @@ const monet = {
     const zoom = 1 + variant * 0.18;
     const fx = variant ? rnd() : 0.5, fy = variant ? rnd() : 0.5;
     drawCover(ctx, img, W, H, zoom, fx, fy);
+    // резкая копия: в конце она проступит сквозь мазки, чтобы лица и детали читались
+    const sharp = makeCanvas(W, H);
+    sharp.getContext('2d').drawImage(c, 0, 0);
     const src = ctx.getImageData(0, 0, W, H).data;
     const at = (x, y) => {
       const k = ((clamp(y | 0, 0, H - 1) * W) + clamp(x | 0, 0, W - 1)) * 4;
       return [src[k], src[k + 1], src[k + 2]];
     };
     // мягкая подложка
-    ctx.filter = 'blur(10px) saturate(1.1)';
+    ctx.filter = 'blur(6px) saturate(1.1)';
     ctx.drawImage(c, 0, 0);
     ctx.filter = 'none';
     ctx.lineCap = 'round';
     const pal = p.palette;
-    const passes = [[p.strokeSize, 1.1, 0.5], [p.strokeSize * 0.55, 1.6, 0.65]];
+    // мазки мельче, чем раньше: крупные (до 26px) превращали фото в кашу.
+    // Ограничение действует и для уже сохранённых дней.
+    const base = clamp(p.strokeSize * 0.6, 6, 15);
+    const passes = [[base, 1.0, 0.45], [base * 0.55, 1.4, 0.55]];
     for (const [size, density, alpha] of passes) {
       const n = Math.floor(((W * H) / (size * size)) * density);
       for (let s = 0; s < n; s++) {
@@ -74,6 +80,10 @@ const monet = {
         ctx.stroke();
       }
     }
+    // оригинал сквозь краску: мазки остаются фактурой, но снимок узнаваем
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(sharp, 0, 0);
+    ctx.globalAlpha = 1;
     // световое пятно: импрессионистский «воздух»
     const light = byLum(pal).pop();
     const gr = ctx.createRadialGradient(W * (0.3 + rnd() * 0.4), H * 0.3, 10, W * 0.5, H * 0.4, W * 0.8);
