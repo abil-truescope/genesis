@@ -8,7 +8,7 @@ import {
 } from './db.js';
 import { MemoryRenderer, CW, CH } from './render/renderer.js';
 import { STYLES, FILM } from './system/mapping.js';
-import { GENRE_LIST, parseSongLink } from './analyze/audio.js';
+import { GENRE_LIST, parseSongLink, fetchSongMeta, songThumb } from './analyze/audio.js';
 import { analyzeText } from './analyze/text.js';
 import { analyzeImages } from './analyze/image.js';
 import { getLlmSettings, setLlmSettings } from './analyze/llm.js';
@@ -410,7 +410,7 @@ function newDraft() {
     photos: [],
     palette: null,
     customTitle: '',
-    song: { tab: 'link', url: '', file: null, ownAudio: false, artist: '', title: '', genre: '', year: '', mood: '' },
+    song: { tab: 'link', url: '', cover: null, file: null, ownAudio: false, artist: '', title: '', genre: '', year: '', mood: '' },
   };
 }
 
@@ -489,6 +489,7 @@ function viewNew() {
       </div>`;
     const ta = $('#f-text');
     const upd = () => {
+      if (!ta.isConnected) return; // пользователь уже ушёл на другую вкладку
       st.text = ta.value;
       refresh();
       setSeasonFor(st.date);
@@ -532,7 +533,7 @@ function viewNew() {
       <div class="palette-live" id="f-pal" hidden><span class="eyebrow">Палитра дня</span><div class="palette"></div></div>`;
     const prev = $('#f-prev');
     const renderPrev = async () => {
-      prev.innerHTML = st.photos.map((p, k) => `<figure class="pv" style="--i:${k}"><img src="${objUrl(p)}" alt=""><button class="icon-btn" data-k="${k}" aria-label="Убрать фото">${icon('close', 14)}</button></figure>`).join('');
+      prev.innerHTML = st.photos.map((p, k) => `<figure class="pv" style="--i:${k}"><img src="${objUrl(p)}" alt=""><button class="icon-btn" data-k="${k}" aria-label="Убрать фото">${icon('close', 14)}</button><button class="icon-btn pv-flip" data-flip="${k}" title="Отразить по горизонтали" aria-label="Отразить фото">${icon('flip', 15)}</button></figure>`).join('');
       refresh();
       const box = $('#f-pal');
       if (!st.photos.length) { box.hidden = true; return; }
@@ -544,7 +545,11 @@ function viewNew() {
     };
     const add = (files) => { st.photos = st.photos.concat([...files].filter((f) => f.type.startsWith('image/'))); renderPrev(); };
     $('#f-photos').onchange = (e) => add(e.target.files);
-    prev.onclick = (e) => { const b = e.target.closest('[data-k]'); if (b) { st.photos.splice(+b.dataset.k, 1); renderPrev(); } };
+    prev.onclick = async (e) => {
+      const f = e.target.closest('[data-flip]');
+      if (f) { const k = +f.dataset.flip; st.photos[k] = await flipBlob(st.photos[k]); renderPrev(); return; }
+      const b = e.target.closest('[data-k]'); if (b) { st.photos.splice(+b.dataset.k, 1); renderPrev(); }
+    };
     const drop = $('#f-drop');
     drop.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#f-photos').click(); } };
     drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
@@ -579,6 +584,7 @@ function viewNew() {
         <label class="field"><span>Год</span><input id="f-year" type="number" min="1900" max="2100" value="${escapeHtml(s.year)}"></label>
         <label class="field"><span>Характер</span><select id="f-mood">${[['', 'определить'], ['calm', 'спокойная'], ['drive', 'драйвовая'], ['sad', 'грустная'], ['happy', 'радостная']].map(([k, l]) => `<option value="${k}" ${s.mood === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>`;
+    let lastMetaUrl = s.url, metaT;
     const sync = () => {
       s.artist = $('#f-artist').value.trim(); s.title = $('#f-title').value.trim();
       s.genre = $('#f-genre').value; s.year = $('#f-year').value; s.mood = $('#f-mood').value;
@@ -587,6 +593,23 @@ function viewNew() {
       $('#f-own-note').hidden = s.ownAudio;
       const l = parseSongLink(s.url);
       $('#f-url-hint').innerHTML = l ? `${icon('check', 14)} ${escapeHtml(l.service)}${l.embed ? ' — будет играть при просмотре записи' : ' — откроется по ссылке'}` : '';
+      if (l && s.url !== lastMetaUrl) {
+        lastMetaUrl = s.url;
+        clearTimeout(metaT);
+        metaT = setTimeout(async () => {
+          const url = s.url;
+          $('#f-url-hint').insertAdjacentHTML('beforeend', ' · <span class="muted">ищу название…</span>');
+          const m = await fetchSongMeta(url);
+          if (url !== s.url || !$('#f-artist')) return;
+          if (m) {
+            s.cover = m.thumb || null;
+            if (!$('#f-artist').value && m.artist) $('#f-artist').value = m.artist;
+            if (!$('#f-title').value && m.title) $('#f-title').value = m.title;
+            sync();
+            $('#f-url-hint').insertAdjacentHTML('beforeend', ` · ♪ ${escapeHtml([m.artist, m.title].filter(Boolean).join(' — '))}`);
+          } else sync();
+        }, 450);
+      }
       refresh();
     };
     $$('.seg button').forEach((b) => (b.onclick = () => {
@@ -607,6 +630,41 @@ function viewNew() {
   }
 }
 
+// Карточка песни: обложка, название, исполнитель и кнопка. Плеер сервиса
+// подгружается только по нажатию, чтобы страница не выглядела как видеосайт.
+function songCardHtml(s) {
+  const cover = s.cover || songThumb(s.embed);
+  return `<div class="song-card" id="song-card">
+    <div class="sc-cover" ${cover ? `style="background-image:url('${escapeHtml(cover)}')"` : ''}>${cover ? '' : icon('music', 22)}</div>
+    <div class="sc-meta"><b>${escapeHtml(s.title || 'Песня дня')}</b><small>${escapeHtml([s.artist, s.year, s.service].filter(Boolean).join(' · '))}</small></div>
+    <button class="btn primary sm sc-play" aria-label="Слушать">${icon('play', 15)}<span>Слушать</span></button>
+  </div><div class="sc-player" id="sc-player" hidden></div>`;
+}
+
+function playEmbed(card, s) {
+  const box = $('#sc-player');
+  if (!box.hidden) return;
+  let src = s.embed;
+  const sep = src.includes('?') ? '&' : '?';
+  if (/youtube/.test(src)) src += `${sep}autoplay=1&rel=0`;
+  else if (/soundcloud/.test(src)) src += `${sep}auto_play=true`;
+  else if (/spotify/.test(src)) src += `${sep}autoplay=1`;
+  const tall = /youtube/.test(src);
+  box.innerHTML = `<iframe class="embed ${tall ? 'video' : ''}" src="${escapeHtml(src)}" allow="autoplay; encrypted-media; picture-in-picture" title="Плеер песни"></iframe>`;
+  box.hidden = false;
+  card.classList.add('playing');
+  card.querySelector('.sc-play').innerHTML = `${icon('check', 15)}<span>Играет ниже</span>`;
+}
+
+async function flipBlob(blob) {
+  const img = await loadImageFromBlob(blob);
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext('2d');
+  g.translate(c.width, 0); g.scale(-1, 1); g.drawImage(img, 0, 0);
+  return new Promise((r) => c.toBlob((b) => r(b), 'image/jpeg', 0.92));
+}
+
 function songFilled(s) { return Boolean(s.url || (s.tab === 'file' && s.file) || s.artist || s.title); }
 function draftFilled(st) { return [st.text.trim().length >= 10, st.photos.length > 0, songFilled(st.song)]; }
 
@@ -623,6 +681,7 @@ async function buildDay() {
       blob: s.tab === 'file' ? s.file : null,
       ownAudio: s.tab === 'file' && s.ownAudio,
       fileName: s.tab === 'file' && s.file ? s.file.name : null,
+      cover: s.cover || null,
       artist: s.artist, title: s.title, genre: s.genre, year: s.year, mood: s.mood,
     },
   };
@@ -813,9 +872,9 @@ async function viewDay(id) {
           <li><b>запись.txt</b><p class="entry">${escapeHtml(day.text)}</p></li>
           <li><b>фото · ${day.photos.length}</b><div class="thumbs">${day.photos.map((ph) => `<img src="${objUrl(ph)}" alt="">`).join('')}</div></li>
           <li><b>песня</b>
-            <p class="song-line">${icon('music', 15)} ${escapeHtml([s.artist, s.title].filter(Boolean).join(' — ') || 'без названия')}${s.year ? ` · ${escapeHtml(s.year)}` : ''}</p>
+            ${s.embed ? '' : `<p class="song-line">${icon('music', 15)} ${escapeHtml([s.artist, s.title].filter(Boolean).join(' — ') || 'без названия')}${s.year ? ` · ${escapeHtml(s.year)}` : ''}</p>`}
             ${hasAudio ? `<audio id="d-audio" controls src="${objUrl(s.blob)}"></audio>` : ''}
-            ${s.embed ? `<iframe class="embed" src="${escapeHtml(s.embed)}" allow="autoplay; encrypted-media" loading="lazy" title="Плеер песни"></iframe>` : ''}
+            ${s.embed ? songCardHtml(s) : ''}
             ${s.url && !s.embed ? `<a class="btn sm" href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${icon('link', 14)}Открыть (${escapeHtml(s.service || 'ссылка')})</a>` : ''}
             ${s.analyzedFromFile && !hasAudio ? `<p class="fine">Темп и лад взяты из аудиофайла, сам файл не сохранён (авторские права).</p>` : ''}
           </li>
@@ -903,12 +962,26 @@ async function viewDay(id) {
     audio.onpause = () => setPlaying(false);
   } else {
     const go = () => {
-      const emb = $('.embed');
-      if (emb) { emb.scrollIntoView({ behavior: 'smooth', block: 'center' }); emb.classList.add('pulse'); setTimeout(() => emb.classList.remove('pulse'), 1200); toast('Песня играет в плеере сервиса'); }
+      const card = $('#song-card');
+      if (card) { playEmbed(card, s); card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); setPlaying(true); }
       else if (s.url) window.open(s.url, '_blank', 'noopener');
       else toast('Для этого дня нет ссылки на песню', 'error');
     };
     musicBtn.onclick = fab.onclick = go;
+    const card = $('#song-card');
+    if (card) card.querySelector('.sc-play').onclick = go;
+    // старые дни без названия песни: узнаём его по ссылке и сохраняем
+    if (s.url && !s.artist && !s.title) {
+      fetchSongMeta(s.url).then(async (m) => {
+        if (!m || (!m.artist && !m.title)) return;
+        s.artist = m.artist; s.title = m.title; s.cover = s.cover || m.thumb || null;
+        day.syncedAt = null;
+        await saveDay(day); pushInBackground(day);
+        const c = $('#song-card');
+        if (c) { c.querySelector('.sc-meta b').textContent = s.title || 'Песня дня'; c.querySelector('.sc-meta small').textContent = [s.artist, s.service].filter(Boolean).join(' · '); }
+        renderer.day = day;
+      }).catch(() => {});
+    }
   }
 
   $('#d-voice').onclick = (e) => {

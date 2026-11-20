@@ -245,3 +245,47 @@ export function parseSongLink(url) {
     return null;
   }
 }
+
+// Название и исполнитель по ссылке (oEmbed). Только адрес ссылки уходит в
+// сервис-посредник noembed.com или в oEmbed самого сервиса; ничего не хранится.
+const JUNK = /\s*[\(\[](official\s*(music\s*)?(video|audio|clip|lyric video|visualizer)|lyrics?|lyric video|audio|hd|hq|4k|mv|клип|премьера[^)\]]*|official)[\)\]]/gi;
+
+export function splitSongTitle(raw = '', author = '') {
+  let t = raw.replace(JUNK, '').replace(/\s*\|.*$/, '').replace(/\s+/g, ' ').trim();
+  let artist = '', title = t;
+  const m = t.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (m) { artist = m[1].trim(); title = m[2].trim(); }
+  else if (author) artist = author.replace(/VEVO$/i, '').replace(/\s*-\s*Topic$/i, '').replace(/\s*Official$/i, '').trim();
+  title = title.replace(/^["«]|["»]$/g, '');
+  return { artist, title };
+}
+
+export function songThumb(embed) {
+  const m = embed && embed.match(/youtube\.com\/embed\/([\w-]{6,})/);
+  return m ? `https://i.ytimg.com/vi/${m[1]}/mqdefault.jpg` : null;
+}
+
+export async function fetchSongMeta(url) {
+  const l = parseSongLink(url);
+  if (!l) return null;
+  const q = encodeURIComponent(url.trim());
+  const tries = [];
+  if (l.service === 'Spotify') tries.push(`https://open.spotify.com/oembed?url=${q}`);
+  if (l.service === 'YouTube') tries.push(`https://www.youtube.com/oembed?format=json&url=${q}`);
+  if (l.service === 'SoundCloud') tries.push(`https://soundcloud.com/oembed?format=json&url=${q}`);
+  tries.push(`https://noembed.com/embed?url=${q}`);
+  for (const u of tries) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      const r = await fetch(u, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (j.error || !j.title) continue;
+      const { artist, title } = splitSongTitle(j.title, l.service === 'Spotify' ? '' : j.author_name);
+      return { artist, title, thumb: j.thumbnail_url || songThumb(l.embed), service: l.service };
+    } catch (e) { /* следующий источник */ }
+  }
+  return null;
+}

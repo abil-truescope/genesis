@@ -12,4 +12,4 @@ export const GOOGLE_ENABLED = false;
 export const APP_NAME = 'Дневник атмосферы';
 // Куда писать по вопросам данных. Можно заменить на почту команды.
 export const CONTACT_URL = 'https://github.com/abil-truescope/genesis/issues';
-export const POLICY_VERSION = '2026-11-20b';
+export const POLICY_VERSION = '2026-11-20c';

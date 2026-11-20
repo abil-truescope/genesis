@@ -3,7 +3,7 @@
 import { analyzeText } from './analyze/text.js';
 import { analyzeWithLlm, mergeTextAnalysis } from './analyze/llm.js';
 import { analyzeImages } from './analyze/image.js';
-import { decodeAudio, analyzeAudioBuffer, songFromDescription, parseSongLink } from './analyze/audio.js';
+import { decodeAudio, analyzeAudioBuffer, songFromDescription, parseSongLink, fetchSongMeta } from './analyze/audio.js';
 import { buildParams } from './system/mapping.js';
 import { MemoryRenderer, CW, CH } from './render/renderer.js';
 import { saveDay, listDays } from './db.js';
@@ -32,6 +32,10 @@ export async function createDay(input, onStatus = () => {}) {
   const images = norm.map((n) => n.img);
   const photos = norm.map((n) => n.blob);
 
+  if (song.url && !song.artist && !song.title) {
+    const m = await fetchSongMeta(song.url).catch(() => null);
+    if (m) { song.artist = m.artist; song.title = m.title; song.cover = song.cover || m.thumb; }
+  }
   onStatus('Читаю текст дня');
   const songDesc = [song.artist, song.title, song.genre, song.year].filter(Boolean).join(', ');
   const rules = analyzeText(text, date);
@@ -87,6 +91,7 @@ export async function createDay(input, onStatus = () => {}) {
       blob: song.blob && song.ownAudio ? song.blob : null,
       analyzedFromFile: Boolean(song.blob),
       fileName: song.fileName || null,
+      cover: song.cover || null,
       url: song.url || null,
       embed: link?.embed || null,
       service: link?.service || null,
