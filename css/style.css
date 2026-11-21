@@ -364,6 +364,10 @@ textarea { font: 22px/1.45 var(--serif); resize: vertical; min-height: 220px; pa
 .play-fab:hover { transform: scale(1.08); }
 .play-fab.on { background: var(--ink); color: var(--bg); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.readings { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); display: grid; gap: 10px; }
+.readings-h { margin: 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.readings .chip small { opacity: .7; font-size: .85em; }
+.readings-act { display: flex; align-items: center; gap: 12px; }
 .rec { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; font: 12.5px var(--sans); color: var(--accent); }
 .rec i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: blink 1s infinite; }
 .pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; }
@@ -528,6 +532,7 @@ code { font: 12.5px var(--sans); background: var(--surface-2); padding: 1px 5px;
   /* кнопки с подписями, сеткой 2×2; «играть» на картинке дублирует «Музыку», на телефоне она только мешает */
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .controls .btn { justify-content: center; padding: 12px 10px; }
+  .readings .chips { gap: 6px; }
   .play-fab { display: none; }
   #app { padding-bottom: 130px; }
   .tabbar {

@@ -891,6 +891,11 @@ function yearHtml(items, y) {
 }
 
 // ================= Папка дня =================
+function manualNote(p) {
+  const s = p.suggested;
+  return s ? `Стиль выбран вами вручную; дневник предлагал: ${STYLES[s.style].name}${s.film ? ' + плёнка' : ''}.` : '';
+}
+
 async function viewDay(id) {
   setNav('archive');
   const day = await getDay(id);
@@ -903,6 +908,7 @@ async function viewDay(id) {
   const prevD = all[pos + 1], nextD = all[pos - 1];
   const p = day.params;
   const S = STYLES[p.style];
+  const sug = p.suggested || { style: p.style, film: !!p.film };
   const s = day.song;
   const mood = p.mood;
   const bars = [['настроение', mood.valence], ['энергия', mood.energy], ['напряжение', mood.tension], ['теплота', mood.warmth], ['ностальгия', mood.nostalgia], ['с людьми', mood.social]];
@@ -922,6 +928,12 @@ async function viewDay(id) {
         <button class="btn" id="d-video">${icon('video', 16)}<span>Видео</span></button>
         <button class="btn" id="d-zip">${icon('download', 16)}<span>Папка дня</span></button>
       </div>
+      <div class="readings">
+        <p class="readings-h">Другие прочтения</p>
+        <div class="chips" id="d-styles">${Object.keys(STYLE_SHORT).map((k) => `<button class="chip ${k === p.style ? 'on' : ''}" data-s="${k}">${STYLE_SHORT[k]}${k === sug.style ? '<small> · выбор дневника</small>' : ''}</button>`).join('')}</div>
+        <label class="switch"><input type="checkbox" id="d-film" ${p.film ? 'checked' : ''}><span class="track"></span><span>Плёнка${sug.film ? ' <small class="muted">· выбор дневника</small>' : ''}</span></label>
+        <div class="readings-act" id="d-read-act" hidden><button class="btn sm primary" id="d-keep">${icon('check', 15)}Сохранить так</button><button class="link" id="d-revert">Вернуть</button></div>
+      </div>
       <div class="rec" id="d-rec" hidden><i></i><span id="d-rec-t">Запись видео</span></div>
       <nav class="pager">
         ${prevD ? `<a href="#day-${encodeURIComponent(prevD.id)}" class="pg">${icon('left', 16)}<span>${escapeHtml(prevD.title)}</span></a>` : '<span></span>'}
@@ -931,7 +943,7 @@ async function viewDay(id) {
     <aside class="folder-panel">
       <p class="eyebrow">${escapeHtml(formatDateRu(new Date(day.date)))} · стр. ${day.pageNo || 1}</p>
       <h1 class="day-title">${icon('folder', 26)} <span id="d-title">${escapeHtml(day.title)}</span><button class="icon-btn sm rename" id="d-rename" title="Переименовать" aria-label="Переименовать день">${icon('pen', 16)}</button></h1>
-      <div class="chips"><span class="chip on">${escapeHtml(S.name)}</span>${p.film ? '<span class="chip">плёнка</span>' : ''}<span class="chip">${p.bpm} bpm</span><span class="chip">голос: ${escapeHtml(p.voice.character)}</span></div>
+      <div class="chips"><span class="chip on">${escapeHtml(S.name)}</span><span class="chip" id="d-film-chip" ${p.film ? '' : 'hidden'}>плёнка</span><span class="chip">${p.bpm} bpm</span><span class="chip">голос: ${escapeHtml(p.voice.character)}</span></div>
       <div class="seg tabs" role="tablist"><button class="on" data-t="folder" role="tab">${icon('folder', 15)}Папка</button><button data-t="why" role="tab">${icon('why', 15)}Почему так?</button></div>
       <div data-tp="folder">
         <ul class="files">
@@ -951,6 +963,7 @@ async function viewDay(id) {
         <div class="bars">${bars.map(([n, v]) => `<div class="bar"><span>${n}</span><i style="--v:${v}"></i><em>${Math.round(v * 100)}</em></div>`).join('')}</div>
         <ol class="why-list">${p.explain.map((e, i) => `<li style="--i:${i}"><b>${escapeHtml(e.factor)}</b><span>${escapeHtml(e.effect)}</span></li>`).join('')}</ol>
         <p class="ref">Референс: ${escapeHtml(S.reference)}${p.film ? `; ${escapeHtml(FILM.reference)}` : ''}</p>
+        <p class="ref" id="why-manual" ${p.suggested ? '' : 'hidden'}>${manualNote(p)}</p>
         <p class="fine">Оценки настроения — художественный инструмент, а не диагностика.</p>
       </div>
       <button class="btn ghost danger sm" id="d-del">${icon('trash', 15)}Удалить день</button>
@@ -984,11 +997,50 @@ async function viewDay(id) {
   const images = [];
   for (const ph of day.photos) images.push(await loadImageFromBlob(ph));
   const canvas = $('#d-canvas');
-  const renderer = new MemoryRenderer(canvas, day, images);
+  let renderer = new MemoryRenderer(canvas, day, images);
   await renderer.prepare();
   if (location.hash !== '#day-' + id) return; // пользователь уже ушёл
   active = { renderer };
   renderer.start();
+
+  // «Другие прочтения»: тот же рендерер, меняются только style и film
+  let view = { style: p.style, film: !!p.film }, token = 0;
+  const same = (a, b) => a.style === b.style && a.film === b.film;
+  const paintReading = () => {
+    $$('#d-styles .chip').forEach((c) => c.classList.toggle('on', c.dataset.s === view.style));
+    $('#d-film').checked = view.film;
+    const saved = { style: p.style, film: !!p.film };
+    $('#d-read-act').hidden = same(view, saved) && same(saved, sug);
+    $('#d-keep').hidden = same(view, saved);
+    $('#d-revert').hidden = same(view, sug);
+  };
+  const showReading = async (next) => {
+    view = next; paintReading();
+    const my = ++token;
+    const r = new MemoryRenderer(canvas, { ...day, params: { ...p, style: next.style, film: next.film } }, images);
+    await r.prepare();
+    if (my !== token || active?.renderer !== renderer) return; // уже выбрали другое или ушли со страницы
+    r.attachAudio(renderer.audioEl, renderer.analyser);
+    r.clockStart = renderer.clockStart;
+    renderer.stop(); renderer = r; active.renderer = r; r.start();
+  };
+  $$('#d-styles .chip').forEach((c) => (c.onclick = () => showReading({ ...view, style: c.dataset.s })));
+  $('#d-film').onchange = (e) => showReading({ ...view, film: e.target.checked });
+  $('#d-revert').onclick = () => showReading({ ...sug });
+  $('#d-keep').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    p.style = view.style; p.film = view.film;
+    if (same(view, sug)) delete p.suggested; else p.suggested = sug;
+    try { day.thumb = await renderer.snapshot(Math.min(p.slideSeconds * 0.4, 2.5)); } catch (err) { /* превью останется прежним */ }
+    day.syncedAt = null;
+    await saveDay(day); pushInBackground(day);
+    $('.folder-panel .chips .chip.on').textContent = STYLES[p.style].name;
+    $('#d-film-chip').hidden = !p.film;
+    const why = $('#why-manual'); why.hidden = !p.suggested; why.textContent = manualNote(p);
+    b.disabled = false; paintReading();
+    toast(p.suggested ? 'Сохранено ваше прочтение' : 'Возвращён выбор дневника');
+  };
+  paintReading();
 
   const onKey = (e) => {
     if (e.target.matches('input, textarea')) return;
