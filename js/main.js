@@ -1151,11 +1151,13 @@ async function viewSettings() {
           <div class="btn-col"><button class="btn primary" id="s-signup">${icon('user', 16)}Зарегистрироваться</button><button class="btn" id="s-login">Войти</button></div>`}
       </div>
       <div class="set-card">
-        <h3>${icon('sparkle', 18)} Анализ текста (по желанию)</h3>
-        <p class="muted">Без ключа всё работает офлайн по словарю. С ключом Gemini названия и оценки точнее — но текст уходит в Google.</p>
-        <label class="field"><span>Gemini API key — хранится только в этом браузере</span><input id="s-key" type="password" value="${escapeHtml(s.apiKey)}" placeholder="AIza…" autocomplete="off"></label>
-        <label class="field"><span>Модель</span><input id="s-model" value="${escapeHtml(s.model)}"></label>
-        <button class="btn primary" id="s-save">${icon('check', 16)}Сохранить</button>
+        <h3>${icon('sparkle', 18)} Оформление</h3>
+        <p class="muted">Фон сайта меняется по сезону даты: зимой снег, весной лепестки и трава, летом солнце и море, осенью листья. В записи и на странице дня сезон берётся из её даты.</p>
+        <label class="switch"><input type="checkbox" id="s-season" ${seasonBgEnabled() ? 'checked' : ''}><span class="track"></span><span>Сезонный фон <small class="muted">(сейчас: ${SEASON_NAMES[seasonOf()]})</small></span></label>
+      </div>
+      <div class="set-card">
+        <h3>${icon('download', 18)} Приложение</h3>
+        ${installHint()}
       </div>
       <div class="set-card">
         <h3>${icon('folder', 18)} Мои данные</h3>
@@ -1168,13 +1170,11 @@ async function viewSettings() {
         <p class="status-line" id="demo-status"></p>
       </div>
       <div class="set-card">
-        <h3>${icon('sparkle', 18)} Оформление</h3>
-        <p class="muted">Фон сайта меняется по сезону даты: зимой снег, весной лепестки и трава, летом солнце и море, осенью листья. В записи и на странице дня сезон берётся из её даты.</p>
-        <label class="switch"><input type="checkbox" id="s-season" ${seasonBgEnabled() ? 'checked' : ''}><span class="track"></span><span>Сезонный фон <small class="muted">(сейчас: ${SEASON_NAMES[seasonOf()]})</small></span></label>
-      </div>
-      <div class="set-card">
-        <h3>${icon('download', 18)} Приложение</h3>
-        ${installHint()}
+        <h3>${icon('sparkle', 18)} Анализ текста (по желанию)</h3>
+        <p class="muted">Без ключа всё работает офлайн по словарю. С ключом Gemini названия и оценки точнее — но текст уходит в Google.</p>
+        <label class="field"><span>Gemini API key — хранится только в этом браузере</span><input id="s-key" type="password" value="${escapeHtml(s.apiKey)}" placeholder="AIza…" autocomplete="off"></label>
+        <label class="field"><span>Модель</span><input id="s-model" value="${escapeHtml(s.model)}"></label>
+        <button class="btn primary" id="s-save">${icon('check', 16)}Сохранить</button>
       </div>
       <div class="set-card">
         <h3>${icon('shield', 18)} Конфиденциальность</h3>
