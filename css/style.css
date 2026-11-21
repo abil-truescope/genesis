@@ -168,6 +168,11 @@ main:focus { outline: none; }
 .orb span:nth-child(2) { background: radial-gradient(circle at 70% 35%, var(--c2), transparent 68%); animation-duration: 17s; animation-direction: reverse; }
 .orb span:nth-child(3) { background: radial-gradient(circle at 45% 75%, var(--c3), transparent 66%); animation-duration: 20s; }
 .orb span:nth-child(4) { background: radial-gradient(circle at 60% 55%, var(--c4), transparent 60%); animation-duration: 23s; animation-direction: reverse; }
+.fan { position: relative; width: min(380px, 100%); aspect-ratio: 1; justify-self: center; }
+.fan a { position: absolute; width: 56%; aspect-ratio: 4/5; top: calc(10% - var(--k) * 3%); left: calc(1% + var(--k) * 21.5%); border-radius: 3px; overflow: hidden; background: var(--surface-2);
+  transform: rotate(var(--r)); box-shadow: 0 1px 1px rgba(40, 28, 14, .1), 0 10px 22px -8px rgba(60, 40, 20, .3); transition: transform .3s var(--ease), box-shadow .3s var(--ease); }
+.fan img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (hover: hover) { .fan a:hover { transform: rotate(var(--r)) translateY(-8px); box-shadow: 0 1px 1px rgba(40, 28, 14, .1), 0 18px 30px -10px rgba(60, 40, 20, .34); z-index: 3; } }
 .orb i { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent); animation: spin 60s linear infinite; }
 
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 34px 0 10px; }
@@ -498,6 +503,7 @@ code { font: 12.5px var(--sans); background: var(--surface-2); padding: 1px 5px;
 @media (max-width: 960px) {
   .hero { grid-template-columns: 1fr; min-height: 0; }
   .orb { width: 220px; order: -1; justify-self: start; margin-bottom: -10px; }
+  .fan { width: min(300px, 100%); margin-top: 6px; }
   .day { grid-template-columns: minmax(0, 1fr); }
   .folder-panel { position: static; }
   .two-col { grid-template-columns: minmax(0, 1fr); }

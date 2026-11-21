@@ -327,9 +327,9 @@ async function viewHome() {
             : `<a class="btn primary lg" href="#new">${icon('pen', 16)}Записать сегодня</a><a class="btn lg" href="#archive">${icon('archive', 16)}Архив</a>`}
         </div>
       </div>
-      <div class="orb" aria-hidden="true" style="--c1:${rgbStr(pal[0])};--c2:${rgbStr(pal[1] || pal[0])};--c3:${rgbStr(pal[2] || pal[0])};--c4:${rgbStr(pal[3] || pal[0])}">
+      ${days.length ? fanHtml(days.slice(0, 3)) : `<div class="orb" aria-hidden="true" style="--c1:${rgbStr(pal[0])};--c2:${rgbStr(pal[1] || pal[0])};--c3:${rgbStr(pal[2] || pal[0])};--c4:${rgbStr(pal[3] || pal[0])}">
         <span></span><span></span><span></span><span></span><i></i>
-      </div>
+      </div>`}
     </div>
 
     ${days.length ? `
@@ -377,6 +377,15 @@ async function viewHome() {
   $$('.strip .cell[data-date]').forEach((c) => c.addEventListener('click', () => { draft = null; pendingDate = c.dataset.date; }));
   const demoBtn = $('#btn-demo');
   if (demoBtn) demoBtn.onclick = () => addDemoDays(demoBtn, $('#demo-status'));
+}
+
+// Последние страницы веером, как снимки на столе: свежая сверху
+function fanHtml(recent) {
+  const tilt = ['-6deg', '2deg', '7deg'];
+  return `<div class="fan">${recent.slice().reverse().map((d, i) => `
+    <a href="#day-${encodeURIComponent(d.id)}" style="--r:${tilt[i + 3 - recent.length]};--k:${i + 3 - recent.length}" aria-label="${escapeHtml(d.title)}">
+      ${d.thumb ? `<img src="${objUrl(d.thumb)}" alt="">` : ''}
+    </a>`).join('')}</div>`;
 }
 
 function cardHtml(d, i = 0) {
