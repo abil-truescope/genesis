@@ -225,6 +225,8 @@ button.link { background: none; border: 0; padding: 4px 2px; font: inherit; font
 .card:hover .card-img img { transform: scale(1.035); }
 .chip.on-img { position: absolute; left: 10px; bottom: 10px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(6px); border: 0; opacity: 0; transform: translateY(6px); transition: all .25s var(--ease); }
 .card:hover .chip.on-img { opacity: 1; transform: none; }
+/* на телефоне плашка закрывала подпись карточки, а hover после касания «залипает» */
+@media (max-width: 600px), (hover: none) { .chip.on-img { display: none; } }
 .card .meta { padding: 12px 2px 0; display: flex; flex-direction: column; gap: 2px; }
 .folder { display: inline-flex; align-items: flex-start; gap: 6px; font: 600 19px/1.2 var(--serif); }
 .folder .ic { margin-top: 2px; color: var(--muted); }
