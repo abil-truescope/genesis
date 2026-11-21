@@ -1022,6 +1022,13 @@ async function viewDay(id) {
 }
 
 // ================= Настройки =================
+function installHint() {
+  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return '<p class="muted">Дневник открыт как приложение.</p>';
+  if (installPrompt) return `<p class="muted">Своя иконка на экране, отдельное окно и работа без сети.</p><button class="btn" id="s-install">${icon('download', 16)}Установить приложение</button>`;
+  if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return '<p class="muted">В Safari нажмите «Поделиться», затем «На экран Домой».</p>';
+  return '<p class="muted">Дневник можно установить как приложение: в меню браузера выберите «Установить приложение» или «Добавить на главный экран».</p>';
+}
+
 async function viewSettings() {
   setNav('settings');
   const u = currentUser();
@@ -1067,6 +1074,10 @@ async function viewSettings() {
         <label class="switch"><input type="checkbox" id="s-season" ${seasonBgEnabled() ? 'checked' : ''}><span class="track"></span><span>Сезонный фон <small class="muted">(сейчас: ${SEASON_NAMES[seasonOf()]})</small></span></label>
       </div>
       <div class="set-card">
+        <h3>${icon('download', 18)} Приложение</h3>
+        ${installHint()}
+      </div>
+      <div class="set-card">
         <h3>${icon('shield', 18)} Конфиденциальность</h3>
         <p class="muted">Никакой аналитики и рекламы. Оценки настроения — не диагностика.</p>
         <div class="btn-col"><a class="btn" href="#privacy">Политика конфиденциальности</a><a class="btn" href="#terms">Условия использования</a></div>
@@ -1085,6 +1096,13 @@ async function viewSettings() {
     if (!(await confirmModal('Удалить аккаунт?', 'Аккаунт, все дни и фото будут удалены с сервера и с этого устройства. Восстановить их будет нельзя.', 'Удалить аккаунт'))) return;
     try { await deleteAllDays(); await deleteAccount(); toast('Аккаунт удалён'); location.hash = '#home'; }
     catch (err) { toast('Не удалось удалить аккаунт: ' + humanError(err), 'error', 5000); }
+  });
+  $('#s-install') && ($('#s-install').onclick = async () => {
+    const p = installPrompt; if (!p) return;
+    installPrompt = null;
+    p.prompt();
+    await p.userChoice;
+    route();
   });
   $('#s-save').onclick = () => {
     setLlmSettings({ apiKey: $('#s-key').value.trim(), model: $('#s-model').value.trim() || 'gemini-2.5-flash' });
@@ -1126,6 +1144,15 @@ onAuthChange(async (u, event) => {
 });
 
 window.addEventListener('hashchange', route);
+
+// PWA: офлайн-оболочка и установка. В dist/index.html (file://) воркера нет — просто пропускаем.
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; if (location.hash.startsWith('#settings')) route(); });
+window.addEventListener('appinstalled', () => { installPrompt = null; toast('Дневник установлен'); });
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('service-worker.js').catch(() => {});
+}
+
 (async () => {
   applyUser();
   route();
