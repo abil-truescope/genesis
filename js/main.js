@@ -763,13 +763,14 @@ function revealDay(id) {
 }
 
 // ================= Архив =================
-let archiveState = { q: '', style: 'all', view: 'grid', month: null };
+let archiveState = { q: '', style: 'all', view: 'grid', month: null, year: null };
 
 async function viewArchive() {
   setNav('archive');
   const days = await listDays();
   const A = archiveState;
   if (!A.month) { const d = days[0] ? new Date(days[0].date) : new Date(); A.month = [d.getFullYear(), d.getMonth()]; }
+  if (!A.year) A.year = A.month[0];
   app.innerHTML = `
   <section class="archive">
     <div class="page-head">
@@ -780,7 +781,7 @@ async function viewArchive() {
     <div class="toolbar">
       <label class="search">${icon('search', 16)}<input id="a-q" placeholder="Поиск по названию и тексту" value="${escapeHtml(A.q)}"></label>
       <div class="chips" id="a-styles">${[['all', 'Все'], ...Object.entries(STYLE_SHORT), ['film', 'Плёнка']].map(([k, l]) => `<button class="chip ${A.style === k ? 'on' : ''}" data-s="${k}">${l}</button>`).join('')}</div>
-      <div class="seg sm" id="a-view"><button class="${A.view === 'grid' ? 'on' : ''}" data-v="grid" aria-label="Лента">${icon('grid', 16)}</button><button class="${A.view === 'cal' ? 'on' : ''}" data-v="cal" aria-label="Календарь">${icon('calendar', 16)}</button></div>
+      <div class="seg sm" id="a-view"><button class="${A.view === 'grid' ? 'on' : ''}" data-v="grid" aria-label="Лента">${icon('grid', 16)}</button><button class="${A.view === 'cal' ? 'on' : ''}" data-v="cal" aria-label="Календарь">${icon('calendar', 16)}</button><button class="${A.view === 'year' ? 'on' : ''}" data-v="year" aria-label="Год атмосфер">Год</button></div>
     </div>
     <div id="a-list"></div>` : `
     <div class="empty">
@@ -807,6 +808,10 @@ async function viewArchive() {
       list.innerHTML = items.length
         ? `<div class="grid">${items.map((d, i) => cardHtml(d, i)).join('')}</div>`
         : `<p class="empty-line">Ничего не нашлось. Попробуйте другой запрос.</p>`;
+    } else if (A.view === 'year') {
+      list.innerHTML = yearHtml(items, A.year);
+      $('#yr-prev').onclick = () => { A.year--; draw(); };
+      $('#yr-next').onclick = () => { A.year++; draw(); };
     } else {
       list.innerHTML = calendarHtml(items, A.month);
       $('#cal-prev').onclick = () => { A.month = shiftMonth(A.month, -1); draw(); };
@@ -842,6 +847,37 @@ function calendarHtml(items, [y, m]) {
     <div class="calendar">
       <div class="cal-head"><button class="icon-btn" id="cal-prev" aria-label="Предыдущий месяц">${icon('left')}</button><h3>${title}</h3><button class="icon-btn" id="cal-next" aria-label="Следующий месяц">${icon('right')}</button></div>
       <div class="cal-grid">${['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'].map((d) => `<div class="cal-dow">${d}</div>`).join('')}${cells.join('')}</div>
+    </div>`;
+}
+
+// «Год атмосфер»: строка — месяц, клетка — день, цвет — главный цвет палитры дня
+function yearHtml(items, y) {
+  const byDate = new Map();
+  items.forEach((d) => { if (!byDate.has(d.date)) byDate.set(d.date, d); });
+  const today = localISO();
+  let count = 0;
+  const rows = [];
+  for (let m = 0; m < 12; m++) {
+    const daysIn = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let day = 1; day <= 31; day++) {
+      if (day > daysIn) { cells.push('<i class="yr-cell none"></i>'); continue; }
+      const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const e = byDate.get(iso);
+      const label = formatDateRu(new Date(iso));
+      if (e) count++;
+      cells.push(e
+        ? `<a class="yr-cell has" href="#day-${encodeURIComponent(e.id)}" style="background:${rgbStr(e.params.palette[0])}" title="${escapeHtml(label + ' — ' + e.title)}" aria-label="${escapeHtml(label + ' — ' + e.title)}"></a>`
+        : `<i class="yr-cell ${iso === today ? 'today' : ''}" title="${label}"></i>`);
+    }
+    const name = new Date(y, m, 1).toLocaleDateString('ru-RU', { month: 'short' }).replace('.', '');
+    rows.push(`<span class="yr-m">${name}</span>${cells.join('')}`);
+  }
+  return `
+    <div class="calendar year">
+      <div class="cal-head"><button class="icon-btn" id="yr-prev" aria-label="Предыдущий год">${icon('left')}</button><h3>${y} · ${count} ${plural(count, 'день', 'дня', 'дней')}</h3><button class="icon-btn" id="yr-next" aria-label="Следующий год">${icon('right')}</button></div>
+      <div class="yr-grid">${rows.join('')}</div>
+      <p class="muted yr-note">Каждая клетка — день, залитый главным цветом его палитры. Нажмите, чтобы открыть.</p>
     </div>`;
 }
 
