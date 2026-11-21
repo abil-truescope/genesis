@@ -129,17 +129,19 @@ const minimal = {
   prepare(img, W, H, p, i, variant) {
     const c = makeCanvas(W, H);
     const ctx = c.getContext('2d');
-    const r = this.photoRect(W, H, p, i + variant);
+    // «Ма» — пауза: фото всегда на одном месте и в одном кадрировании,
+    // иначе при смене кадров одно и то же фото накладывается само на себя
+    const r = this.photoRect(W, H, p, i);
     const pc = makeCanvas(Math.round(r.w), Math.round(r.h));
     const pctx = pc.getContext('2d');
     pctx.filter = 'saturate(0.35) contrast(0.9) brightness(1.06) sepia(0.08)';
-    drawCover(pctx, img, pc.width, pc.height, 1 + variant * 0.2, 0.5, 0.45);
+    drawCover(pctx, img, pc.width, pc.height, 1, 0.5, 0.45);
     ctx.drawImage(pc, r.x, r.y);
     return c;
   },
   overlay(g, f) {
-    const { ctx, X, Y, W, H, p, idx, t, title } = f;
-    const r = this.photoRect(W, H, p, idx);
+    const { ctx, X, Y, W, H, p, idx, photoI, t, title } = f;
+    const r = this.photoRect(W, H, p, photoI ?? idx);
     ctx.save();
     // тонкая линия горизонта — единственная «деталь»
     ctx.strokeStyle = rgbStr(p.ink, 0.55);

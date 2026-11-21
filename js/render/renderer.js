@@ -171,6 +171,9 @@ export class MemoryRenderer {
     const drawLayer = (sl, localT, alpha, idx) => {
       const L = this.layer(sl);
       const dir = (idx % 2 ? 1 : -1);
+      if (p.style === 'minimal') { // неподвижно: без наезда и сдвига
+        ctx.globalAlpha = alpha; ctx.drawImage(L, win.x, win.y, win.w, win.h); ctx.globalAlpha = 1; return;
+      }
       const z = 1 + p.motion * (p.style === 'minimal' ? 0.3 : 1) * smooth(localT) + (p.style === 'kandinsky' ? pulse * 0.012 : 0);
       const dx = dir * p.motion * win.w * 0.35 * (localT - 0.5);
       ctx.globalAlpha = alpha;
@@ -207,7 +210,7 @@ export class MemoryRenderer {
     // 3. живые элементы стиля
     const f = {
       ctx, X: win.x, Y: win.y, W: win.w, H: win.h, p, t, beat, pulse, frameNo: this.frameNo,
-      idx: cur.i + cur.v, title: this.day.title,
+      idx: cur.i + cur.v, photoI: cur.i, title: this.day.title,
     };
     if (p.style === 'minimal') { f.X = win.x; f.Y = win.y; }
     STYLE_IMPL[p.style].overlay(this, f);
