@@ -1181,6 +1181,13 @@ async function viewSettings() {
         <p class="muted">Никакой аналитики и рекламы. Оценки настроения — не диагностика.</p>
         <div class="btn-col"><a class="btn" href="#privacy">Политика конфиденциальности</a><a class="btn" href="#terms">Условия использования</a></div>
       </div>
+      <div class="set-card">
+        <h3>${icon('folder', 18)} О проекте</h3>
+        <p class="muted">Дневник, который превращает запись, фото и песню дня в живую страницу — чтобы помнить, как день ощущался.</p>
+        <p class="muted">Genesis Hackathon 2026 · кейс ArtTech · Team prime</p>
+        <div class="btn-col"><a class="btn" href="https://github.com/abil-truescope/genesis" target="_blank" rel="noopener">${icon('link', 16)}Код на GitHub</a></div>
+        <p class="fine">Версия ${escapeHtml(POLICY_VERSION)}</p>
+      </div>
     </div>
   </section>`;
   $('#s-logout') && ($('#s-logout').onclick = async () => { await signOut(); toast('Вы вышли'); });
