@@ -125,3 +125,17 @@ export async function initAuth() {
     console.warn('Auth недоступен, работаем офлайн', e);
   }
 }
+
+// Смена пароля и имени для вошедшего пользователя
+export async function updatePassword(password) {
+  const c = await getClient();
+  const { error } = await c.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+export async function updateName(name) {
+  const c = await getClient();
+  const { data, error } = await c.auth.updateUser({ data: { name } });
+  if (error) throw error;
+  setSessionUser(data.user, 'USER_UPDATED'); // сразу обновить сохранённого пользователя, не дожидаясь события
+}

@@ -17,7 +17,7 @@ import { recordVideo, dayFolderZip, download, safeName, makeZip } from './export
 import { DEMO_DAYS, buildDemoInput } from './demo.js';
 import {
   currentUser, onAuthChange, signUp, signIn, signInWithGoogle, signOut, googleConfigured, databaseFor,
-  humanError, initAuth, deleteAccount, resetPassword,
+  humanError, initAuth, deleteAccount, resetPassword, updatePassword, updateName,
 } from './auth.js';
 import { syncAll, pushDay, deleteDayCloud, deleteAllCloud, onSyncStatus, syncStatus } from './cloud.js';
 import { PRIVACY_HTML, TERMS_HTML } from './privacy.js';
@@ -147,6 +147,7 @@ async function openLogin(initialTab = 'in') {
         <p class="err" id="au-err" role="alert"></p>
         <button class="btn primary lg wide" id="au-submit" type="submit"></button>
         <button class="btn ghost sm" type="button" id="au-forgot" data-only="in">Забыли пароль?</button>
+        <p class="fine" data-only="in">Письмо может не дойти — если вы вошли, пароль можно сменить в настройках.</p>
       </form>
       ${googleConfigured() ? `<div class="or"><span>или</span></div><button class="btn lg wide" id="au-google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Войти через Google</button>` : ''}
       <p class="fine">Без аккаунта дневник тоже работает — тогда он хранится только в этом браузере.</p>`,
@@ -1082,6 +1083,39 @@ async function viewDay(id) {
 }
 
 // ================= Настройки =================
+async function openPasswordChange() {
+  await modal({
+    title: 'Сменить пароль',
+    body: `
+      <form class="auth-form" id="pw-form" novalidate>
+        <label class="field"><span>Новый пароль</span><input id="pw-1" type="password" autocomplete="new-password" minlength="8" required placeholder="минимум 8 символов"></label>
+        <label class="field"><span>Повторите пароль</span><input id="pw-2" type="password" autocomplete="new-password" minlength="8" required></label>
+        <p class="err" id="pw-err" role="alert"></p>
+        <button class="btn primary lg wide" id="pw-submit" type="submit">Сохранить пароль</button>
+      </form>`,
+    onMount: (wrap, close) => {
+      const q = (sel) => wrap.querySelector(sel);
+      q('#pw-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const a = q('#pw-1').value, b = q('#pw-2').value, err = q('#pw-err');
+        if (a.length < 8) { err.textContent = 'Пароль: минимум 8 символов'; q('#pw-1').focus(); return; }
+        if (a !== b) { err.textContent = 'Пароли не совпадают'; q('#pw-2').focus(); return; }
+        const btn = q('#pw-submit');
+        btn.disabled = true; btn.classList.add('loading'); err.textContent = '';
+        try { await updatePassword(a); close(true); toast('Пароль изменён'); }
+        catch (ex) {
+          const m = String(ex?.message || '');
+          // эти два ответа humanError не знает (и первый ошибочно принял бы за «слишком простой»)
+          err.textContent = /different from the old/i.test(m) ? 'Новый пароль совпадает со старым'
+            : /reauthenticat/i.test(m) ? 'Для смены пароля выйдите и войдите заново'
+            : humanError(ex);
+        } finally { btn.disabled = false; btn.classList.remove('loading'); }
+      };
+      setTimeout(() => q('#pw-1').focus(), 80);
+    },
+  });
+}
+
 function installHint() {
   if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return '<p class="muted">Дневник открыт как приложение.</p>';
   if (installPrompt) return `<p class="muted">Своя иконка на экране, отдельное окно и работа без сети.</p><button class="btn" id="s-install">${icon('download', 16)}Установить приложение</button>`;
@@ -1103,7 +1137,12 @@ async function viewSettings() {
         ${u ? `
           <div class="profile">${u.picture ? `<img src="${escapeHtml(u.picture)}" alt="" referrerpolicy="no-referrer">` : ''}<div><b>${escapeHtml(u.name)}</b><small>${escapeHtml(u.email)}</small></div></div>
           <p class="sync-line ${syncStatus().state}" id="sync-line">${syncText(syncStatus())}</p>
+          <form class="name-row" id="s-name-form">
+            <label class="field"><span>Имя</span><input id="s-name" value="${escapeHtml(u.name)}" maxlength="80" autocomplete="name" required></label>
+            <button class="btn sm" id="s-name-save" type="submit">${icon('check', 15)}Сохранить</button>
+          </form>
           <div class="btn-col">
+            <button class="btn" id="s-pass">${icon('shield', 16)}Сменить пароль</button>
             <button class="btn" id="s-sync">${icon('upload', 16)}Синхронизировать сейчас</button>
             <button class="btn" id="s-logout">${icon('logout', 16)}Выйти</button>
             <button class="btn ghost danger" id="s-delacc">${icon('trash', 16)}Удалить аккаунт</button>
@@ -1145,6 +1184,18 @@ async function viewSettings() {
     </div>
   </section>`;
   $('#s-logout') && ($('#s-logout').onclick = async () => { await signOut(); toast('Вы вышли'); });
+  $('#s-name-form') && ($('#s-name-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $('#s-name').value.trim();
+    if (!name) { $('#s-name').focus(); return; }
+    if (name === currentUser()?.name) return;
+    const btn = $('#s-name-save');
+    btn.disabled = true; btn.classList.add('loading');
+    try { await updateName(name); applyUser(); toast('Имя сохранено'); }
+    catch (err) { toast(humanError(err), 'error', 5000); }
+    finally { btn.disabled = false; btn.classList.remove('loading'); }
+  });
+  $('#s-pass') && ($('#s-pass').onclick = () => openPasswordChange());
   $('#s-login') && ($('#s-login').onclick = () => openLogin('in'));
   $('#s-signup') && ($('#s-signup').onclick = () => openLogin('up'));
   $('#s-sync') && ($('#s-sync').onclick = async (e) => {
@@ -1198,7 +1249,7 @@ function viewDoc(kind) {
 // ================= Запуск =================
 onAuthChange(async (u, event) => {
   applyUser();
-  if (u && event !== 'INITIAL') { toast(`Привет, ${u.givenName || u.name}!`); await offerMigration(); }
+  if (u && event !== 'INITIAL' && event !== 'USER_UPDATED') { toast(`Привет, ${u.givenName || u.name}!`); await offerMigration(); }
   route();
   if (u) syncAll().then((r) => { if (r.pulled) route(); }).catch(() => {});
 });
