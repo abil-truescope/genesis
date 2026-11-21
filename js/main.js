@@ -293,8 +293,7 @@ async function viewHome() {
   const cur = new Date();
   if (!byDate.has(localISO(cur))) cur.setDate(cur.getDate() - 1);
   while (byDate.has(localISO(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
-  const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
-  const monthCount = days.filter((d) => d.date >= localISO(monthAgo)).length;
+  const monthCount = days.filter((d) => d.date.startsWith(today.slice(0, 7))).length;
   const counts = {};
   days.forEach((d) => { counts[d.params.style] = (counts[d.params.style] || 0) + 1; });
   const fav = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -320,6 +319,12 @@ async function viewHome() {
       <div class="hero-text">
         <p class="eyebrow">${escapeHtml(longDate(now))}</p>
         <h1>${greeting(now)}${name ? `, ${escapeHtml(name)}` : ''}.</h1>
+        ${days.length ? `<p class="diary-line">${[
+          `${days.length} ${plural(days.length, 'страница', 'страницы', 'страниц')}`,
+          monthCount ? `${monthCount} за этот месяц` : '',
+          streak >= 2 ? `${streak} ${plural(streak, 'день', 'дня', 'дней')} подряд` : '',
+          fav ? `чаще всего — ${STYLE_SHORT[fav]}` : '',
+        ].filter(Boolean).join(' · ')}</p>` : ''}
         <p class="lead">${todayEntry ? `Сегодняшний день уже в дневнике — «${escapeHtml(todayEntry.title)}».` : now.getHours() >= 19 ? 'Как прошёл день? Запишите, пока помните свет и запахи.' : 'Как прошёл сегодня? Пара строк, фото и песня — и день останется таким, каким вы его почувствовали.'}</p>
         <div class="hero-actions" ${days.length ? '' : 'hidden'}>
           ${todayEntry
@@ -339,14 +344,6 @@ async function viewHome() {
       <div><p class="eyebrow">В этот день · ${escapeHtml(formatDateRu(new Date(onThisDay.date)))}</p><h3>${escapeHtml(onThisDay.title)}</h3><p class="muted">${escapeHtml(onThisDay.caption || '')}</p></div>
       ${icon('right', 20)}
     </a>` : ''}
-
-    <div class="stats" data-stagger>
-      <div class="stat"><b>${days.length}</b><span>${plural(days.length, 'день', 'дня', 'дней')} в дневнике</span></div>
-      ${streak >= 2
-        ? `<div class="stat"><b>${streak}</b><span>${plural(streak, 'день', 'дня', 'дней')} подряд</span></div>`
-        : `<div class="stat"><b>${monthCount}</b><span>${plural(monthCount, 'запись', 'записи', 'записей')} за 30 дней</span></div>`}
-      <div class="stat"><b>${fav ? STYLE_SHORT[fav] : '—'}</b><span>частый приём</span></div>
-    </div>
 
     <div class="block" data-stagger>
       <div class="block-head"><h2>Последние две недели</h2><a href="#archive" class="link">Весь архив ${icon('right', 14)}</a></div>
