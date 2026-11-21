@@ -324,12 +324,12 @@ async function viewHome() {
           monthCount ? `${monthCount} за этот месяц` : '',
           streak >= 2 ? `${streak} ${plural(streak, 'день', 'дня', 'дней')} подряд` : '',
           fav ? `чаще всего — ${STYLE_SHORT[fav]}` : '',
-        ].filter(Boolean).join(' · ')}</p>` : ''}
+        ].filter(Boolean).map((t) => `<span>${t}</span>`).join(' · ')}</p>` : ''}
         <p class="lead">${todayEntry ? `Сегодняшний день уже в дневнике — «${escapeHtml(todayEntry.title)}».` : now.getHours() >= 19 ? 'Как прошёл день? Запишите, пока помните свет и запахи.' : 'Как прошёл сегодня? Пара строк, фото и песня — и день останется таким, каким вы его почувствовали.'}</p>
         <div class="hero-actions" ${days.length ? '' : 'hidden'}>
           ${todayEntry
-            ? `<a class="btn primary lg" href="#day-${encodeURIComponent(todayEntry.id)}">${icon('play', 16)}Открыть сегодня</a><a class="btn lg" href="#new">${icon('plus', 16)}Ещё запись</a>`
-            : `<a class="btn primary lg" href="#new">${icon('pen', 16)}Записать сегодня</a><a class="btn lg" href="#archive">${icon('archive', 16)}Архив</a>`}
+            ? `<a class="btn primary lg" href="#day-${encodeURIComponent(todayEntry.id)}">${icon('play', 16)}Открыть сегодня</a><a class="link lg" href="#new">Ещё запись</a>`
+            : `<a class="btn primary lg" href="#new">${icon('pen', 16)}Записать сегодня</a><a class="link lg" href="#archive">Архив</a>`}
         </div>
       </div>
       ${days.length ? fanHtml(days.slice(0, 3)) : `<div class="orb" aria-hidden="true" style="--c1:${rgbStr(pal[0])};--c2:${rgbStr(pal[1] || pal[0])};--c3:${rgbStr(pal[2] || pal[0])};--c4:${rgbStr(pal[3] || pal[0])}">
@@ -346,7 +346,7 @@ async function viewHome() {
     </a>` : ''}
 
     <div class="block" data-stagger>
-      <div class="block-head"><h2>Последние две недели</h2><a href="#archive" class="link">Весь архив ${icon('right', 14)}</a></div>
+      <div class="block-head"><h2>Последние две недели</h2><a href="#archive" class="link">Весь архив</a></div>
       <div class="strip">
         ${strip.map(({ iso, d, e }) => e
           ? `<a class="cell has" href="#day-${encodeURIComponent(e.id)}" style="background:${paletteGradient(e.params.palette)}" title="${escapeHtml(e.title)}"><span>${d.getDate()}</span></a>`
