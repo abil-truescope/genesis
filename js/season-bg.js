@@ -65,14 +65,14 @@ function spawn() {
       parts.push({ x: rnd(0, W), y: rnd(-H, H), r: 1.2 + z * 2.6, vy: 14 + z * 34, sw: rnd(0, 6.28), amp: rnd(8, 26), z });
     }
   } else if (season === 'autumn') {
-    const n = Math.round(Math.min(34, area / 45000));
+    const n = Math.round(Math.min(17, area / 90000));
     const cols = ['#c8642f', '#d9932f', '#a8441f', '#c9a13a', '#8f5a2b'];
     for (let i = 0; i < n; i++) {
       const z = rnd(0.5, 1);
       parts.push({ x: rnd(0, W), y: rnd(-H, H), s: 7 + z * 9, vy: 22 + z * 30, sw: rnd(0, 6.28), amp: rnd(20, 60), rot: rnd(0, 6.28), vr: rnd(-1.4, 1.4), c: pick(cols), z });
     }
   } else if (season === 'spring') {
-    const n = Math.round(Math.min(55, area / 24000));
+    const n = Math.round(Math.min(28, area / 48000));
     const cols = ['#f1b7c4', '#f6cfd8', '#e89aae', '#fbe3e8', '#f3c1a8'];
     for (let i = 0; i < n; i++) {
       const z = rnd(0.45, 1);
