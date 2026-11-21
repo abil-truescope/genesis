@@ -523,13 +523,13 @@ code { font: 12.5px var(--sans); background: var(--surface-2); padding: 1px 5px;
   .play-fab { display: none; }
   #app { padding-bottom: 130px; }
   .tabbar {
-    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; position: fixed; z-index: 30; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
+    display: grid; grid-template-columns: 1fr 1fr auto 1fr 1fr; align-items: center; position: fixed; z-index: 30; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
     background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(16px); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-2); padding: 6px 10px;
   }
-  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; font-size: 11px; color: var(--muted); text-decoration: none; transition: color .15s, transform .15s; }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; font-size: 11px; white-space: nowrap; color: var(--muted); text-decoration: none; transition: color .15s, transform .15s; }
   .tabbar a:active { transform: scale(.92); }
   .tabbar a.on { color: var(--ink); }
-  .tab-new { width: 52px; height: 52px; border-radius: 50%; background: var(--ink); color: var(--bg) !important; justify-content: center; margin-top: -26px; box-shadow: 0 8px 20px rgba(27, 25, 22, .3); }
+  .tab-new { width: 52px; height: 52px; margin-inline: 6px; border-radius: 50%; background: var(--ink); color: var(--bg) !important; justify-content: center; margin-top: -26px; box-shadow: 0 8px 20px rgba(27, 25, 22, .3); }
   #toasts { bottom: calc(96px + env(safe-area-inset-bottom)); }
   .wizard-foot { bottom: calc(70px + env(safe-area-inset-bottom)); }
   .modal { padding: 22px; border-radius: 18px; }

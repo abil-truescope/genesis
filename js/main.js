@@ -63,7 +63,8 @@ function cleanup() {
 
 // ================= Каркас =================
 function setNav(name) {
-  $$('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === name));
+  // «Год» есть только в нижней панели; в шапке на нём подсвечиваем «Архив»
+  $$('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === name || (name === 'year' && a.dataset.nav === 'archive' && !a.closest('.tabbar'))));
 }
 
 function renderUserSlot() {
@@ -266,7 +267,8 @@ async function route() {
   app.classList.add('view-enter');
   if (!h.startsWith('#new') && !h.startsWith('#day-')) setSeasonFor();
   if (h.startsWith('#new')) return viewNew();
-  if (h.startsWith('#archive')) return viewArchive();
+  if (h.startsWith('#year')) { archiveState.view = 'year'; return viewArchive(); }
+  if (h.startsWith('#archive')) { if (archiveState.view === 'year') archiveState.view = 'grid'; return viewArchive(); }
   if (h.startsWith('#day-')) return viewDay(decodeURIComponent(h.slice(5)));
   if (h.startsWith('#settings')) return viewSettings();
   if (h.startsWith('#privacy')) return viewDoc('privacy');
@@ -766,7 +768,7 @@ function revealDay(id) {
 let archiveState = { q: '', style: 'all', view: 'grid', month: null, year: null };
 
 async function viewArchive() {
-  setNav('archive');
+  setNav(archiveState.view === 'year' ? 'year' : 'archive');
   const days = await listDays();
   const A = archiveState;
   if (!A.month) { const d = days[0] ? new Date(days[0].date) : new Date(); A.month = [d.getFullYear(), d.getMonth()]; }
@@ -821,7 +823,7 @@ async function viewArchive() {
   let t;
   $('#a-q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { A.q = e.target.value; draw(); }, 150); };
   $$('#a-styles .chip').forEach((c) => (c.onclick = () => { A.style = c.dataset.s; $$('#a-styles .chip').forEach((x) => x.classList.toggle('on', x === c)); draw(); }));
-  $$('#a-view button').forEach((b) => (b.onclick = () => { A.view = b.dataset.v; $$('#a-view button').forEach((x) => x.classList.toggle('on', x === b)); draw(); }));
+  $$('#a-view button').forEach((b) => (b.onclick = () => { A.view = b.dataset.v; $$('#a-view button').forEach((x) => x.classList.toggle('on', x === b)); setNav(A.view === 'year' ? 'year' : 'archive'); draw(); }));
   draw();
 }
 
