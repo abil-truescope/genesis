@@ -6,6 +6,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHROME = '/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else None  # нет системного Chrome → встроенный chromium Playwright
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/cloud'
 os.makedirs(OUT, exist_ok=True)
 SB = 'https://jnpbvtrhodsypuwlftga.supabase.co'
@@ -93,7 +94,7 @@ async def main():
     serve()
     base = 'http://127.0.0.1:8781/index.html'
     async with async_playwright() as p:
-        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome')
+        b = await p.chromium.launch(executable_path=CHROME)
         ctx = await b.new_context(viewport={'width': 1300, 'height': 950})
         await ctx.route(SB + '/**', handle)
         await ctx.route('https://fonts.googleapis.com/**', lambda r: r.abort())

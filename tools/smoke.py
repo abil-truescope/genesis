@@ -4,6 +4,7 @@ import asyncio, http.server, threading, functools, os, sys, json
 from playwright.async_api import async_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CHROME = '/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else None  # нет системного Chrome → встроенный chromium Playwright
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/shots'
 os.makedirs(OUT, exist_ok=True)
 
@@ -16,7 +17,7 @@ def serve():
 async def main():
     serve()
     async with async_playwright() as p:
-        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--autoplay-policy=no-user-gesture-required'])
+        b = await p.chromium.launch(executable_path=CHROME, args=['--autoplay-policy=no-user-gesture-required'])
         page = await b.new_page(viewport={'width': 1360, 'height': 1000})
         errs = []
         page.on('console', lambda m: errs.append(f'{m.type}: {m.text}') if m.type in ('error', 'warning') else None)
