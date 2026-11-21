@@ -290,6 +290,8 @@ async function viewHome() {
   const cur = new Date();
   if (!byDate.has(localISO(cur))) cur.setDate(cur.getDate() - 1);
   while (byDate.has(localISO(cur))) { streak++; cur.setDate(cur.getDate() - 1); }
+  const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30);
+  const monthCount = days.filter((d) => d.date >= localISO(monthAgo)).length;
   const counts = {};
   days.forEach((d) => { counts[d.params.style] = (counts[d.params.style] || 0) + 1; });
   const fav = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -315,8 +317,8 @@ async function viewHome() {
       <div class="hero-text">
         <p class="eyebrow">${escapeHtml(longDate(now))}</p>
         <h1>${greeting(now)}${name ? `, ${escapeHtml(name)}` : ''}.</h1>
-        <p class="lead">${todayEntry ? `Сегодняшний день уже в дневнике — «${escapeHtml(todayEntry.title)}».` : 'Как прошёл сегодня? Пара строк, фото и песня — и день останется таким, каким вы его почувствовали.'}</p>
-        <div class="hero-actions">
+        <p class="lead">${todayEntry ? `Сегодняшний день уже в дневнике — «${escapeHtml(todayEntry.title)}».` : now.getHours() >= 19 ? 'Как прошёл день? Запишите, пока помните свет и запахи.' : 'Как прошёл сегодня? Пара строк, фото и песня — и день останется таким, каким вы его почувствовали.'}</p>
+        <div class="hero-actions" ${days.length ? '' : 'hidden'}>
           ${todayEntry
             ? `<a class="btn primary lg" href="#day-${encodeURIComponent(todayEntry.id)}">${icon('play', 16)}Открыть сегодня</a><a class="btn lg" href="#new">${icon('plus', 16)}Ещё запись</a>`
             : `<a class="btn primary lg" href="#new">${icon('pen', 16)}Записать сегодня</a><a class="btn lg" href="#archive">${icon('archive', 16)}Архив</a>`}
@@ -328,9 +330,18 @@ async function viewHome() {
     </div>
 
     ${days.length ? `
+    ${onThisDay ? `
+    <a class="memory-card lead-memory" data-stagger href="#day-${encodeURIComponent(onThisDay.id)}">
+      <img src="${onThisDay.thumb ? objUrl(onThisDay.thumb) : ''}" alt="">
+      <div><p class="eyebrow">В этот день · ${escapeHtml(formatDateRu(new Date(onThisDay.date)))}</p><h3>${escapeHtml(onThisDay.title)}</h3><p class="muted">${escapeHtml(onThisDay.caption || '')}</p></div>
+      ${icon('right', 20)}
+    </a>` : ''}
+
     <div class="stats" data-stagger>
       <div class="stat"><b>${days.length}</b><span>${plural(days.length, 'день', 'дня', 'дней')} в дневнике</span></div>
-      <div class="stat"><b>${streak}</b><span>${plural(streak, 'день', 'дня', 'дней')} подряд</span></div>
+      ${streak >= 2
+        ? `<div class="stat"><b>${streak}</b><span>${plural(streak, 'день', 'дня', 'дней')} подряд</span></div>`
+        : `<div class="stat"><b>${monthCount}</b><span>${plural(monthCount, 'запись', 'записи', 'записей')} за 30 дней</span></div>`}
       <div class="stat"><b>${fav ? STYLE_SHORT[fav] : '—'}</b><span>частый приём</span></div>
     </div>
 
@@ -343,12 +354,6 @@ async function viewHome() {
       </div>
     </div>
 
-    ${onThisDay ? `
-    <a class="memory-card" data-stagger href="#day-${encodeURIComponent(onThisDay.id)}">
-      <img src="${onThisDay.thumb ? objUrl(onThisDay.thumb) : ''}" alt="">
-      <div><p class="eyebrow">В этот день · ${escapeHtml(formatDateRu(new Date(onThisDay.date)))}</p><h3>${escapeHtml(onThisDay.title)}</h3><p class="muted">${escapeHtml(onThisDay.caption || '')}</p></div>
-      ${icon('right', 20)}
-    </a>` : ''}
 
     <div class="block" data-stagger>
       <div class="block-head"><h2>Недавние страницы</h2></div>
@@ -360,7 +365,7 @@ async function viewHome() {
         <h2>Начните с любимого дня</h2>
         <p class="muted">Выберите один из самых тёплых дней своей жизни и опишите его как другу: погода, свет, запахи, люди рядом, мелочи.</p>
         <ul class="tips"><li>${icon('pen', 16)}Пишите конкретно</li><li>${icon('photo', 16)}Настоящие фото того дня</li><li>${icon('music', 16)}Та самая песня</li></ul>
-        <div class="hero-actions"><a class="btn primary" href="#new">${icon('pen', 16)}Записать день</a><button class="btn" id="btn-demo">${icon('sparkle', 16)}Показать на 5 демо-днях</button></div>
+        <div class="hero-actions"><a class="btn primary" href="#new">${icon('pen', 16)}Записать первый день</a><button class="link" id="btn-demo">или посмотреть на 5 демо-днях</button></div>
         <p class="status-line" id="demo-status"></p>
       </div>
     </div>`}
@@ -723,6 +728,7 @@ async function buildDay() {
     draft = null;
     pushInBackground(day);
     toast(`Сохранено: «${day.title}»`);
+    justBuilt = day.id;
     setTimeout(() => { location.hash = '#day-' + day.id; }, 650);
   } catch (e) {
     console.error(e);
@@ -741,6 +747,21 @@ function typeTitle(el, text) {
   step();
 }
 
+// Один раз после сборки: карточка дня проявляется, как снимок. Без конфетти.
+let justBuilt = null;
+function revealDay(id) {
+  if (justBuilt !== id) return;
+  justBuilt = null;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ease = 'cubic-bezier(.23, 1, .32, 1)';
+  $('.canvas-wrap')?.animate(reduce
+    ? [{ opacity: 0 }, { opacity: 1 }]
+    : [{ opacity: 0, transform: 'translateY(18px) scale(.965)', filter: 'blur(10px) saturate(.3)' },
+       { opacity: 1, transform: 'none', filter: 'blur(0) saturate(1)' }],
+    { duration: reduce ? 300 : 1100, easing: ease, fill: 'backwards' });
+  if (!reduce) $('.folder-panel')?.animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: 600, delay: 450, easing: ease, fill: 'backwards' });
+}
+
 // ================= Архив =================
 let archiveState = { q: '', style: 'all', view: 'grid', month: null };
 
@@ -753,7 +774,7 @@ async function viewArchive() {
   <section class="archive">
     <div class="page-head">
       <div><h1>Архив</h1><p class="lead">${days.length ? `${days.length} ${plural(days.length, 'страница', 'страницы', 'страниц')}. Все дни — один дневник, но каждый узнаваемо свой.` : 'Здесь будут ваши дни.'}</p></div>
-      <a class="btn primary" href="#new">${icon('plus', 16)}Новый день</a>
+      ${days.length ? `<a class="btn primary" href="#new">${icon('plus', 16)}Новый день</a>` : ''}
     </div>
     ${days.length ? `
     <div class="toolbar">
@@ -765,7 +786,7 @@ async function viewArchive() {
     <div class="empty">
       <div class="empty-art small" aria-hidden="true">${[0, 1, 2, 3].map((i) => `<span class="page p${i}"></span>`).join('')}</div>
       <p>Пока пусто. Запишите первый день или посмотрите, как система работает на демо-днях.</p>
-      <div class="hero-actions"><a class="btn primary" href="#new">${icon('pen', 16)}Записать день</a><button class="btn" id="btn-demo">${icon('sparkle', 16)}Добавить 5 демо-дней</button></div>
+      <div class="hero-actions"><a class="btn primary" href="#new">${icon('pen', 16)}Записать первый день</a><button class="link" id="btn-demo">или добавить 5 демо-дней</button></div>
       <p class="status-line" id="demo-status"></p>
     </div>`}
     ${storageMode() === 'memory' ? `<p class="notice">${icon('shield', 16)}<span>Хранилище браузера недоступно — записи живут до перезагрузки страницы.</span></p>` : ''}
@@ -890,6 +911,7 @@ async function viewDay(id) {
       <button class="btn ghost danger sm" id="d-del">${icon('trash', 15)}Удалить день</button>
     </aside>
   </section>`;
+  revealDay(id);
 
   $('#d-rename').onclick = async () => {
     let val = null;

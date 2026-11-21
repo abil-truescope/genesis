@@ -161,7 +161,7 @@ main:focus { outline: none; }
 /* ---------- главная ---------- */
 .hero { display: grid; grid-template-columns: 1.25fr .75fr; align-items: center; gap: 30px; min-height: 340px; }
 .hero h1 { margin-top: 4px; }
-.hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; }
 .orb { position: relative; width: min(360px, 100%); aspect-ratio: 1; justify-self: center; }
 .orb span { position: absolute; inset: 12%; border-radius: 46% 54% 52% 48% / 52% 44% 56% 48%; mix-blend-mode: multiply; filter: blur(2px); opacity: .85; animation: morph 14s ease-in-out infinite; }
 .orb span:nth-child(1) { background: radial-gradient(circle at 30% 30%, var(--c1), transparent 70%); }
@@ -186,6 +186,9 @@ main:focus { outline: none; }
 .strip .cell.today { border-color: var(--accent); color: var(--accent); border-style: solid; }
 .memory-card { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 18px; margin-top: 34px; padding: 14px 18px 14px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); text-decoration: none; transition: transform .2s var(--ease), box-shadow .2s; }
 .memory-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+.lead-memory { margin-top: 28px; border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); }
+.lead-memory .eyebrow { color: var(--accent); }
+button.link { background: none; border: 0; padding: 4px 2px; font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-2); }
 .memory-card img { width: 96px; aspect-ratio: 4/5; object-fit: cover; border-radius: 8px; }
 .memory-card h3 { font-size: 24px; }
 .memory-card .muted { margin: 4px 0 0; font: italic 500 19px/1.35 var(--serif); color: var(--ink-2); }
