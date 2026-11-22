@@ -16,6 +16,7 @@ Web Speech API (озвучка), MediaRecorder + captureStream (видео), Ind
 - Google Fonts: Cormorant Garamond, Caveat, Inter, JetBrains Mono (лицензия OFL);
 - Supabase (Postgres, Auth, Storage, Edge Functions) и библиотека supabase-js — аккаунты и облачное хранение;
 - embed-плееры Spotify, YouTube, Яндекс Музыки, Apple Music и SoundCloud — для песен по ссылке;
+- oEmbed самих сервисов и noembed.com — чтобы подставить название и исполнителя песни по ссылке (передаётся только адрес ссылки);
 - *необязательно:* Google Gemini API для анализа текста (ключ пользователя хранится в его браузере).
 
 **Разработка:** esbuild (сборка в один файл), Playwright + Chrome (e2e-тест `tools/smoke.py`).
